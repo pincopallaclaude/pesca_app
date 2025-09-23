@@ -1,6 +1,6 @@
 name: pesca_app
 description: "Un nuovo progetto Flutter per le previsioni di pesca."
-publish_to: 'none' 
+publish_to: 'none'
 version: 1.0.0+1
 
 environment:
@@ -16,6 +16,7 @@ dependencies:
   fl_chart: ^1.1.1
   http: ^1.5.0
   geolocator: ^14.0.2
+  app_settings: ^5.0.0
 
 dev_dependencies:
   flutter_test:
@@ -26,12 +27,15 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/background_daily.jpg
+    - assets/background_nocturnal.jpg
+    - assets/background_rainy.jpg
+    - assets/background_sunset.jpg
     - assets/
 
   fonts:
     - family: Roboto
       fonts:
-        # --- MODIFICATO PER CORRISPONDERE AI SUOI FILE ---
         - asset: assets/fonts/Roboto-VariableFont_wdth,wght.ttf
         - asset: assets/fonts/Roboto-Italic-VariableFont_wdth,wght.ttf
           style: italic
