@@ -4,7 +4,16 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/forecast_data.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+/// Eccezione per quando la rete fallisce ma esistono dati obsoleti in cache.
+class NetworkErrorWithStaleDataException implements Exception {
+  /// Il JSON dei dati obsoleti, pronto per essere parsato.
+  final String staleJsonData;
+  const NetworkErrorWithStaleDataException(this.staleJsonData);
+}
+// --- FI
 
 /// Eccezione specifica per quando i servizi di localizzazione del dispositivo sono disattivati.
 class LocationServicesDisabledException implements Exception {
@@ -18,23 +27,86 @@ class LocationServicesDisabledException implements Exception {
 class ApiService {
   final String _baseUrl = 'https://pesca-api.onrender.com/api';
 
+  /// Converte una stringa/emoji dall'API in un'icona e colore per la UI.
+  final Duration _cacheTTL = const Duration(hours: 6); // Time-To-Live per la cache
+
+  /// Converte una stringa/emoji dall'API in un'icona e colore per la UI.
+  Map<String, dynamic> _mapWeatherIcon(String iconString) {
+    final lowerIcon = iconString.toLowerCase();
+    if (lowerIcon.contains('☀️') || lowerIcon.contains('sunny') || lowerIcon.contains('clear')) {
+      return {'icon': Icons.wb_sunny, 'icon_color': Colors.yellow.shade600};
+    } else if (lowerIcon.contains('🌧️') || lowerIcon.contains('rain') || lowerIcon.contains('shower')) {
+      return {'icon': Icons.umbrella, 'icon_color': Colors.blue.shade300};
+    } else if (lowerIcon.contains('☁️') || lowerIcon.contains('cloud')) {
+      return {'icon': Icons.cloud_outlined, 'icon_color': Colors.grey.shade400};
+    }
+    return {'icon': Icons.help_outline, 'icon_color': Colors.grey};
+  }
+
   Future<List<ForecastData>> fetchForecastData(String location) async {
     final url = Uri.parse('$_baseUrl/forecast?location=$location');
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'forecast_$location';
+    final cacheTimestampKey = 'timestamp_$location';
+
+    // 1. VERIFICA CACHE "FRESCA"
+    final cachedData = prefs.getString(cacheKey);
+    final cachedTimestamp = prefs.getInt(cacheTimestampKey);
+
+    if (cachedData != null && cachedTimestamp != null) {
+      final lastUpdate = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
+      if (DateTime.now().difference(lastUpdate) < _cacheTTL) {
+        print("CACHE HIT: Dati freschi trovati per $location");
+        return parseForecastData(cachedData);       }
+    }
+
+    // 2. CACHE MISS O DATI SCADUTI: PROCEDI CON LA CHIAMATA DI RETE
+    print("CACHE MISS: Chiamata di rete per $location");
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
-        final decoded = json.decode(response.body);
-        return (decoded['forecast'] as List)
-            .map((json) => ForecastData.fromJson(json))
-            .toList();
+        // Salva i nuovi dati e il timestamp
+        await prefs.setString(cacheKey, response.body);
+        await prefs.setInt(cacheTimestampKey, DateTime.now().millisecondsSinceEpoch);
+        return parseForecastData(response.body); // Usa il metodo pubblico
       } else {
-        throw Exception(
-            'Errore nel caricare le previsioni (Codice: ${response.statusCode})');
+        throw Exception('Codice errore: ${response.statusCode}');
       }
     } catch (e) {
-      // Intercetta errori di timeout o di rete
-      throw Exception('Errore di rete: ${e.toString()}');
+      // 3. ERRORE DI RETE: GESTISCI FALLBACK
+      print("ERRORE RETE: $e");
+      // Se la chiamata fallisce, controlla se esistono dati (anche se obsoleti)
+      if (cachedData != null) {
+        // Se esistono, lancia la nostra eccezione personalizzata con i dati vecchi
+        throw NetworkErrorWithStaleDataException(cachedData);
+      }
+      // Se non ci sono neanche dati vecchi, lancia un'eccezione generica
+      throw Exception('Errore di rete e nessun dato in cache disponibile.');
     }
+  }
+
+  /// Metodo helper centralizzato per parsare il JSON. Evita la duplicazione del codice.
+  // Ora è PUBBLICO, senza il carattere '_' iniziale.
+  List<ForecastData> parseForecastData(String jsonBody) {
+    final decoded = json.decode(jsonBody);
+    final dailyListRaw = (decoded['forecast'] as List<dynamic>?) ?? [];
+
+    final weeklyData = dailyListRaw.map((dayJson) {
+      final mappedIcon = _mapWeatherIcon(dayJson['meteoIcon'] ?? '');
+      return {
+        'day': dayJson['giornoNome'] ?? 'N/D',
+        'icon': mappedIcon['icon'],
+        'icon_color': mappedIcon['icon_color'],
+        'min': dayJson['temperaturaMin'] as int? ?? 0,
+        'max': dayJson['temperaturaMax'] as int? ?? 0,
+      };
+    }).toList();
+
+    // Questa chiamata ora corrisponde ESATTAMENTE alla firma del costruttore corretta.
+    return dailyListRaw
+        .map((dailyJson) =>
+            ForecastData.fromJson(dailyJson as Map<String, dynamic>, weeklyData))
+        .toList();
   }
 
   Future<List<dynamic>> fetchAutocompleteSuggestions(String query) async {

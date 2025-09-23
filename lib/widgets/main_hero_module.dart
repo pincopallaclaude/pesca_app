@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/forecast_data.dart';
 import '../widgets/fishing_score_indicator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/glassmorphism_card.dart';
-import '../widgets/score_details_dialog.dart'; // Importa la funzione per il dialog
+import '../widgets/score_details_dialog.dart';
 
 class MainHeroModule extends StatelessWidget {
   final ForecastData data;
@@ -35,11 +36,22 @@ class MainHeroModule extends StatelessWidget {
                   )
                 ],
               ),
-              const Icon(Icons.wb_sunny_rounded, size: 48, color: Colors.amber),
+              // L'icona ora proviene dall'URL fornito nei dati orari correnti
+              SizedBox(
+                width: 52,
+                height: 52,
+                child: CachedNetworkImage(
+                  imageUrl: data.currentHourData['weatherIconUrl'] as String? ?? '',
+                  placeholder: (context, url) => const Icon(Icons.wb_sunny_rounded, size: 48, color: Colors.white24),
+                  errorWidget: (context, url, error) => const Icon(Icons.wb_sunny_rounded, size: 48, color: Colors.amber),
+                  color: Colors.amber,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(data.temperaturaAvg,
+          // La temperatura ora mostra quella dell'ora corrente.
+          Text("${data.currentHourData['tempC']}°",
               style: const TextStyle(
                   fontSize: 92, fontWeight: FontWeight.w200, height: 1.1)),
           Text(data.tempMinMax,

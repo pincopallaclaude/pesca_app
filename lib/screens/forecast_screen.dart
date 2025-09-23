@@ -11,6 +11,7 @@ import '../widgets/hourly_forecast.dart';
 import '../widgets/weekly_forecast.dart';
 import '../widgets/search_overlay.dart';
 import '../widgets/location_services_dialog.dart';
+import '../widgets/stale_data_dialog.dart';
 
 class ForecastScreen extends StatefulWidget {
   const ForecastScreen({super.key});
@@ -35,7 +36,29 @@ class _ForecastScreenState extends State<ForecastScreen> {
     if (!mounted) return;
     setState(() {
       _currentLocationName = name;
-      _forecastFuture = _apiService.fetchForecastData(location);
+      // Il FutureBuilder ora gestirà autonomamente i casi di successo, caricamento ed errore.
+      // La nostra logica personalizzata intercetta solo l'eccezione con dati obsoleti.
+      _forecastFuture = _apiService.fetchForecastData(location).catchError((e) {
+        if (e is NetworkErrorWithStaleDataException && mounted) {
+          showStaleDataDialog(context).then((useStaleData) {
+            if (useStaleData == true) {
+              // Se l'utente accetta, aggiorniamo il future con i dati obsoleti.
+              setState(() {
+                // Chiamata al metodo PUBBLICO 'parseForecastData'.
+                _forecastFuture =
+                    Future.value(_apiService.parseForecastData(e.staleJsonData));
+              });
+            } else {
+              // Altrimenti, propaghiamo l'errore al FutureBuilder.
+              setState(() {
+                _forecastFuture = Future.error(Exception('Aggiornamento rifiutato.'));
+              });
+            }
+          });
+        }
+        // Rilancia l'eccezione per farla gestire dal FutureBuilder.
+        throw e;
+      });
     });
   }
 

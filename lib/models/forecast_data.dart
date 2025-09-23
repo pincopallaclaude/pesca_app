@@ -30,7 +30,8 @@ class ForecastData {
     required this.pescaScoreReasons, required this.hourlyData, required this.weeklyData,
   });
 
-  factory ForecastData.fromJson(Map<String, dynamic> json) {
+  // La firma del costruttore ORA è CORRETTA E DEFINITIVA: accetta due parametri.
+  factory ForecastData.fromJson(Map<String, dynamic> json, List<Map<String, dynamic>> weeklyData) {
     final tempAvg = json['temperaturaAvg']?.toString() ?? 'N/D';
     final tempMin = json['temperaturaMin']?.toString() ?? '?';
     final tempMax = json['temperaturaMax']?.toString() ?? '?';
@@ -57,15 +58,61 @@ class ForecastData {
       finestraSera: json['finestraSera']?['orario'] ?? 'N/D',
       pescaScoreNumeric: (scoreData['numericScore'] as num?)?.toDouble() ?? 0.0,
       pescaScoreReasons: reasonsList.map((r) => ScoreReason.fromJson(r)).toList(),
-      hourlyData: mockHourlyData, // Dati fittizi come nell'originale
-      weeklyData: mockWeeklyData, // Dati fittizi come nell'originale
+      hourlyData: (json['hourly'] as List<dynamic>?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
+      weeklyData: weeklyData, // Ora 'weeklyData' è correttamente definito e usato.
     );
   }
-  /// Determina il path dell'immagine di sfondo corretta in base all'orario
-  /// e alle condizioni meteo del giorno corrente.
+
+  /// Determina il path dell'immagine di sfondo corretta.
+
+  /// Restituisce la previsione oraria più vicina al momento attuale.
+  /// Utile per la card principale (Hero).
+  Map<String, dynamic> get currentHourData {
+    if (hourlyData.isEmpty) {
+      // Fallback elegante se i dati orari non sono presenti
+      return {
+        'time': '--:--',
+        'tempC': temperaturaAvg.replaceAll('°', ''), // Usa la temp media del giorno
+        'weatherCode': '0', // Codice per 'sconosciuto'
+        'isNow': true,
+      };
+    }
+
+    final now = DateTime.now();
+    // Trova la prima previsione oraria che è successiva all'ora attuale
+    final currentHour = hourlyData.firstWhere(
+      (hour) {
+        final hourTime = int.tryParse(hour['time']?.split(':')[0] ?? '0') ?? 0;
+        return hourTime >= now.hour;
+      },
+      orElse: () => hourlyData.last, // Se è tardi, usa l'ultima previsione del giorno
+    );
+    
+    print('[ForecastData Log] Dati orari correnti trovati per le ${now.hour}:00. Usando: ${currentHour['time']}');
+
+    return {...currentHour, 'isNow': true}; // Aggiunge un flag per la UI
+  }
+
+  /// Restituisce la lista di previsioni orarie da mostrare nella riga orizzontale.
+  /// Esclude le ore già passate per una UI più pulita.
+  List<Map<String, dynamic>> get hourlyForecastForDisplay {
+    if (hourlyData.isEmpty) return [];
+
+    final now = DateTime.now();
+    final int currentHourInt = now.hour;
+    
+    // Filtra la lista per mostrare solo le ore future
+    return hourlyData.where((hour) {
+      final hourTime = int.tryParse(hour['time']?.split(':')[0] ?? '0') ?? 0;
+      return hourTime >= currentHourInt;
+    }).toList();
+  }
+
   String get backgroundImagePath {
     try {
-      // 1. Helper per convertire stringhe HH:mm in oggetti DateTime completi.
       DateTime _parseTime(String timeStr) {
         final now = DateTime.now();
         final parts = timeStr.split(':');
@@ -76,7 +123,6 @@ class ForecastData {
       final oraAlba = _parseTime(alba);
       final oraTramonto = _parseTime(tramonto);
 
-      // 2. REGOLA 1: Finestra "Golden Hour" (Alba/Tramonto)
       final unOraPrimaAlba = oraAlba.subtract(const Duration(hours: 1));
       final unOraDopoAlba = oraAlba.add(const Duration(hours: 1));
       final unOraPrimaTramonto = oraTramonto.subtract(const Duration(hours: 1));
@@ -87,14 +133,10 @@ class ForecastData {
         return 'assets/background_sunset.jpg';
       }
 
-      // 3. REGOLA 2: Notte
       if (oraCorrente.isBefore(oraAlba) || oraCorrente.isAfter(oraTramonto)) {
         return 'assets/background_nocturnal.jpg';
       }
 
-      // 4. REGOLA 3: Giorno con pioggia
-      // NOTA: Qui si assume una convenzione per l'icona meteo. Adattare se necessario.
-      // Questa logica cerca parole chiave generiche associate alla pioggia.
       final condizioneMeteo = meteoIcon.toLowerCase();
       if (condizioneMeteo.contains('rain') || 
           condizioneMeteo.contains('shower') ||
@@ -104,24 +146,10 @@ class ForecastData {
         return 'assets/background_rainy.jpg';
       }
 
-      // 5. REGOLA 4 (DEFAULT): Giorno standard
       return 'assets/background_daily.jpg';
 
     } catch (e) {
-      // In caso di qualsiasi errore (es. parsing delle date), ritorna lo sfondo di default.
-      print("Errore nel determinare lo sfondo: $e");
       return 'assets/background_daily.jpg';
     }
   }
-
 }
-
-// Dati fittizi presenti nel file originale
-final List<Map<String, dynamic>> mockHourlyData = [
-  {'time': 'Adesso', 'icon': Icons.cloud, 'temp': '23°'},
-  {'time': '15:00', 'icon': Icons.wb_sunny, 'temp': '24°'}
-];
-final List<Map<String, dynamic>> mockWeeklyData = [
-  {'day': 'Oggi', 'icon': Icons.wb_cloudy, 'icon_color': Colors.white, 'min': 21, 'max': 25},
-  {'day': 'Mer', 'icon': Icons.wb_sunny, 'icon_color': Colors.yellow, 'min': 20, 'max': 24}
-];
