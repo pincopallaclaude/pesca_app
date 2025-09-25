@@ -51,9 +51,14 @@ class MainHeroModule extends StatelessWidget {
               ),
               BoxedIcon(
                 getWeatherIcon(
-                    data.currentHourData['weatherCode'] as String? ?? '0'),
+                  data.currentHourData['weatherCode'] as String? ?? '0',
+                  isDay: data.currentHourData['isDay'] as bool? ?? false,
+                ),
                 size: 42,
-                color: Colors.amber,
+                color: getWeatherIconColor(
+                  data.currentHourData['weatherCode'] as String? ?? '0',
+                  isDay: data.currentHourData['isDay'] as bool? ?? true,
+                ),
               ),
             ]),
         const SizedBox(height: 8),

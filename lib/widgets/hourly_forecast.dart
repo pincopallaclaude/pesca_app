@@ -49,9 +49,14 @@ class HourlyForecast extends StatelessWidget {
                   ),
                 ),
                 BoxedIcon(
-                  getWeatherIcon(data['weatherCode'] as String? ?? '0'),
+                  getWeatherIcon(
+                    data['weatherCode'] as String? ?? '0',
+                    isDay: data['isDay'] as bool? ?? true,
+                  ),
                   size: 28,
-                  color: Colors.white, // Colore unificato
+                  color: getWeatherIconColor(
+                      data['weatherCode'] as String? ?? '0',
+                      isDay: data['isDay'] as bool? ?? true),
                 ),
                 Text(
                   "${data['tempC']}°",
