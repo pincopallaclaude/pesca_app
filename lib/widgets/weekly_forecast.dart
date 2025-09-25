@@ -8,30 +8,43 @@ class WeeklyForecast extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: weeklyData.map((data) => _buildWeeklyRow(data)).toList());
+    return Column(
+        children:
+            weeklyData.map((data) => _buildWeeklyRow(context, data)).toList());
   }
 
-  Widget _buildWeeklyRow(Map<String, dynamic> data) {
+  Widget _buildWeeklyRow(BuildContext context, Map<String, dynamic> data) {
+    // Estrai i dati con un cast sicuro
+    final dayName = data['day'] as String? ?? 'N/D';
+    final icon = data['icon'] as IconData? ?? Icons.help_outline;
+    final iconColor = data['icon_color'] as Color? ?? Colors.white;
+
+    // --- CORREZIONE DEFINITIVA QUI ---
+    // Leggiamo i valori come 'num' generico per accettare sia int che double,
+    // poi li arrotondiamo a 'int' per la UI.
+    final minTemp = (data['min'] as num?)?.round() ?? 0;
+    final maxTemp = (data['max'] as num?)?.round() ?? 0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: Row(
         children: [
           Expanded(
               flex: 3,
-              child: Text(data['day'],
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500))),
+              child: Text(dayName,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500))),
+          Expanded(flex: 2, child: Icon(icon, color: iconColor, size: 28)),
           Expanded(
               flex: 2,
-              child: Icon(data['icon'], color: data['icon_color'], size: 28)),
-          Expanded(
-              flex: 2,
-              child: Text("${data['min']}°",
+              child: Text("$minTemp°",
                   style: const TextStyle(fontSize: 18, color: Colors.white70))),
-          Expanded(flex: 5, child: _buildTempBar(data['min'], data['max'])),
+          Expanded(flex: 5, child: _buildTempBar(minTemp, maxTemp)),
           Expanded(
               flex: 2,
-              child: Text("${data['max']}°",
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)))
+              child: Text("$maxTemp°",
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500)))
         ],
       ),
     );
@@ -55,11 +68,13 @@ class WeeklyForecast extends StatelessWidget {
           child: FractionallySizedBox(
             widthFactor: 1.0,
             child: Container(
-              margin: EdgeInsets.only(left: 100 * startFraction.clamp(0.0, 1.0)),
+              margin:
+                  EdgeInsets.only(left: 100 * startFraction.clamp(0.0, 1.0)),
               width: 100 * widthFraction.clamp(0.0, 1.0),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(2.5),
-                gradient: const LinearGradient(colors: [Colors.cyan, Colors.yellow, Colors.orange]),
+                gradient: const LinearGradient(
+                    colors: [Colors.cyan, Colors.yellow, Colors.orange]),
               ),
             ),
           ),

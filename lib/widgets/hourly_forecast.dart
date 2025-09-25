@@ -1,6 +1,8 @@
+// lib/widgets/hourly_forecast.dart
+
 import 'package:flutter/material.dart';
-import '../widgets/glassmorphism_card.dart'; // Potrebbe essere usata se non è un child di un'altra card
-import 'package:cached_network_image/cached_network_image.dart'; // Aggiungi l'import
+import 'package:weather_icons/weather_icons.dart'; // Aggiungi import per il nuovo pacchetto di icone
+import '../utils/weather_icon_mapper.dart'; // Aggiungi import per il nostro helper
 
 class HourlyForecast extends StatelessWidget {
   final List<Map<String, dynamic>> hourlyData;
@@ -9,7 +11,8 @@ class HourlyForecast extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('[HourlyForecast Log] Dati ricevuti per la visualizzazione: ${hourlyData.length} elementi.');
+    print(
+        '[HourlyForecast Log] Dati ricevuti per la visualizzazione: ${hourlyData.length} elementi.');
 
     if (hourlyData.isEmpty) {
       return const SizedBox(
@@ -22,9 +25,6 @@ class HourlyForecast extends StatelessWidget {
         ),
       );
     }
-    
-    // La prima ora nella lista è quella "attuale"
-    final currentHour = hourlyData[0]; 
 
     return SizedBox(
       height: 90,
@@ -33,8 +33,8 @@ class HourlyForecast extends StatelessWidget {
         itemCount: hourlyData.length,
         itemBuilder: (context, index) {
           final data = hourlyData[index];
-          // Il flag 'isNow' ci aiuta a determinare l'ora corrente
-          final isNow = data['time'] == currentHour['time'];
+          // LA LOGICA "isNow" VIENE COMPLETAMENTE RIMOSSA
+          final timeLabel = (data['time'] as String?)?.split(':')[0] ?? '';
 
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -42,30 +42,21 @@ class HourlyForecast extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 Text(
-                  isNow ? 'Adesso' : (data['time'] as String?)?.split(':')[0] ?? '',
-                  style: TextStyle(
+                  timeLabel, // Mostra sempre e solo l'ora
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: isNow ? Colors.white : Colors.white70,
-                    fontWeight: isNow ? FontWeight.bold : FontWeight.normal,
+                    color: Colors.white70, // Stile unificato
                   ),
                 ),
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CachedNetworkImage(
-                    imageUrl: data['weatherIconUrl'] as String? ?? '',
-                    placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                    errorWidget: (context, url, error) => Icon(
-                      Icons.cloud_off, 
-                      color: Colors.white.withOpacity(0.5), 
-                      size: 28,
-                    ),
-                    color: isNow ? Colors.yellow.shade600 : Colors.white,
-                  ),
+                BoxedIcon(
+                  getWeatherIcon(data['weatherCode'] as String? ?? '0'),
+                  size: 28,
+                  color: Colors.white, // Colore unificato
                 ),
                 Text(
                   "${data['tempC']}°",
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),

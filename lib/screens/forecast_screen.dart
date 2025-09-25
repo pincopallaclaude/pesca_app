@@ -45,13 +45,14 @@ class _ForecastScreenState extends State<ForecastScreen> {
               // Se l'utente accetta, aggiorniamo il future con i dati obsoleti.
               setState(() {
                 // Chiamata al metodo PUBBLICO 'parseForecastData'.
-                _forecastFuture =
-                    Future.value(_apiService.parseForecastData(e.staleJsonData));
+                _forecastFuture = Future.value(
+                    _apiService.parseForecastData(e.staleJsonData));
               });
             } else {
               // Altrimenti, propaghiamo l'errore al FutureBuilder.
               setState(() {
-                _forecastFuture = Future.error(Exception('Aggiornamento rifiutato.'));
+                _forecastFuture =
+                    Future.error(Exception('Aggiornamento rifiutato.'));
               });
             }
           });
@@ -67,39 +68,43 @@ class _ForecastScreenState extends State<ForecastScreen> {
     _removeSearchOverlay();
     if (!mounted) return;
 
-    setState(() { _isLoadingGps = true; });
+    setState(() {
+      _isLoadingGps = true;
+    });
 
     try {
       // Chiama il servizio per ottenere posizione e nome
       final locationData = await _apiService.getCurrentGpsLocation();
       final coords = locationData['coords']!;
       final name = locationData['name']!;
-      
+
       // Carica le nuove previsioni
       _loadForecast(coords, name);
-
     } on LocationServicesDisabledException {
       // CASO SPECIFICO: i servizi GPS sono spenti. Mostra il dialogo personalizzato.
       if (!mounted) return;
       showLocationServicesDialog(context);
-
     } catch (e) {
       // CASO GENERICO: altri errori (permessi negati, rete, etc.). Mostra la SnackBar.
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll("Exception: ", "")), // Pulisce il messaggio
+          content: Text(e
+              .toString()
+              .replaceAll("Exception: ", "")), // Pulisce il messaggio
           backgroundColor: Colors.redAccent,
         ),
       );
     } finally {
       // Alla fine del processo, nascondi sempre l'indicatore
       if (mounted) {
-        setState(() { _isLoadingGps = false; });
+        setState(() {
+          _isLoadingGps = false;
+        });
       }
     }
   }
-  
+
   void _onLocationSelected(String location, String name) {
     _removeSearchOverlay();
     _loadForecast(location, name);
@@ -133,25 +138,35 @@ class _ForecastScreenState extends State<ForecastScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _isLoadingGps
-          ? Container(color: Colors.black, child: const Center(child: CircularProgressIndicator(color: Colors.white)))
+          ? Container(
+              color: Colors.black,
+              child: const Center(
+                  child: CircularProgressIndicator(color: Colors.white)))
           : FutureBuilder<List<ForecastData>>(
               future: _forecastFuture,
               builder: (context, snapshot) {
                 // Durante il caricamento iniziale (o dopo un refresh), mostriamo uno sfondo nero
                 if (!snapshot.hasData) {
-                  return Container(color: Colors.black, child: const Center(child: CircularProgressIndicator(color: Colors.white)));
+                  return Container(
+                      color: Colors.black,
+                      child: const Center(
+                          child:
+                              CircularProgressIndicator(color: Colors.white)));
                 }
 
                 if (snapshot.hasError) {
                   return Center(
                       child: Text('Errore: ${snapshot.error}',
                           style: const TextStyle(
-                              color: Colors.white, backgroundColor: Colors.black54),
+                              color: Colors.white,
+                              backgroundColor: Colors.black54),
                           textAlign: TextAlign.center));
                 }
 
                 if (snapshot.data!.isEmpty) {
-                  return const Center(child: Text('Nessun dato.', style: TextStyle(color: Colors.white)));
+                  return const Center(
+                      child: Text('Nessun dato.',
+                          style: TextStyle(color: Colors.white)));
                 }
 
                 final forecasts = snapshot.data!;
@@ -169,13 +184,14 @@ class _ForecastScreenState extends State<ForecastScreen> {
                       },
                       child: Image.asset(
                         backgroundPath,
-                        key: ValueKey(backgroundPath), // Chiave per far scattare l'animazione
+                        key: ValueKey(
+                            backgroundPath), // Chiave per far scattare l'animazione
                         fit: BoxFit.cover,
                         width: double.infinity,
                         height: double.infinity,
                       ),
                     ),
-                    
+
                     // Gradiente per la leggibilità del testo
                     Container(
                       decoration: BoxDecoration(
@@ -191,7 +207,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                         ),
                       ),
                     ),
-                    
+
                     // Contenuto principale dell'app
                     PageView.builder(
                       itemCount: forecasts.length,
@@ -221,7 +237,7 @@ class ForecastPage extends StatelessWidget {
       required this.locationName,
       required this.onSearchTap,
       super.key});
-      
+
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
@@ -236,7 +252,9 @@ class ForecastPage extends StatelessWidget {
           pinned: true,
           centerTitle: true,
           leading: IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
-          title: Text(locationName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 22)),
+          title: Text(locationName,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w500, fontSize: 22)),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -255,7 +273,8 @@ class ForecastPage extends StatelessWidget {
             const SizedBox(height: 20),
             GlassmorphismCard(
                 title: "PREVISIONI NELLE PROSSIME ORE",
-                child: HourlyForecast(hourlyData: data.hourlyData)),
+                child:
+                    HourlyForecast(hourlyData: data.hourlyForecastForDisplay)),
             const SizedBox(height: 20),
             GlassmorphismCard(
                 title: "PREVISIONI A 7 GIORNI",
