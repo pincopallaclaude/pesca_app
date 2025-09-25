@@ -26,7 +26,7 @@ class ApiService {
   Future<List<ForecastData>> fetchForecastData(String location) async {
     final prefs = await SharedPreferences.getInstance();
     const cacheVersion =
-        '_v2.5'; // Incrementa la versione per invalidare la cache vecchia
+        '_v2.2'; // Incrementa la versione per invalidare la cache vecchia
     final cacheKey = 'forecast_$location$cacheVersion';
     final cacheTimestampKey = 'timestamp_$location$cacheVersion';
     final cachedData = prefs.getString(cacheKey);
