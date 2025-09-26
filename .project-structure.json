@@ -1,0 +1,23 @@
+﻿{
+    "lib/":  "Main source code directory containing all application logic and components",
+    "lib/main.dart":  "Application entry point with initialization and configuration",
+    "lib/models/":  "Data models and entity definitions for structured data handling",
+    "lib/models/forecast_data.dart":  "Restituisce la previsione oraria piÃ¹ vicina al momento attuale.",
+    "lib/screens/":  "UI screens and page components for user interface navigation",
+    "lib/screens/forecast_screen.dart":  "Main screen/page (ForecastScreen) for user interface navigation",
+    "lib/services/":  "Business logic services and external API integration layers",
+    "lib/services/api_service.dart":  "API service for external data fetching and HTTP requests (uses: package:http/http.dart)",
+    "lib/utils/":  "Utility functions, helpers, and common functionality",
+    "lib/utils/weather_icon_mapper.dart":  "Restituisce l\u0027IconData corretta per un dato codice meteo.",
+    "lib/widgets/":  "Reusable UI components and custom Flutter widgets",
+    "lib/widgets/fishing_score_indicator.dart":  "Custom UI widget (FishingScoreIndicator) for user interface components",
+    "lib/widgets/glassmorphism_card.dart":  "Custom UI widget (GlassmorphismCard) for user interface components",
+    "lib/widgets/hourly_forecast.dart":  "Custom UI widget (HourlyForecast) for user interface components",
+    "lib/widgets/location_services_dialog.dart":  "Funzione helper per mostrare il dialogo modale personalizzato.",
+    "lib/widgets/main_hero_module.dart":  "Custom UI widget (MainHeroModule) for user interface components",
+    "lib/widgets/score_chart_dialog.dart":  "Funzione helper per mostrare il dialogo del grafico.",
+    "lib/widgets/score_details_dialog.dart":  "Custom UI widget (ScoreDetailsDialog) for user interface components",
+    "lib/widgets/search_overlay.dart":  "Custom UI widget (SearchOverlay) for user interface components",
+    "lib/widgets/stale_data_dialog.dart":  "Mostra un dialogo che chiede all\u0027utente se vuole usare i dati obsoleti.",
+    "lib/widgets/weekly_forecast.dart":  "Custom UI widget (WeeklyForecast) for user interface components"
+}
