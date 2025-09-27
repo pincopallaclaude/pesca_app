@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../utils/weather_icon_mapper.dart';
+import 'package:flutter/foundation.dart';
 
 class ScoreReason {
   final String icon, text, points, type;
@@ -22,34 +23,34 @@ class ScoreReason {
 }
 
 class ForecastData {
-  final String giornoNome,
-      giornoData,
-      meteoIcon,
-      temperaturaAvg,
-      tempMinMax,
-      ventoDati,
-      pressione,
-      umidita,
-      mare,
-      altaMarea,
-      bassaMarea,
-      faseLunare,
-      alba,
-      tramonto,
-      finestraMattino,
-      finestraSera;
-  final double pescaScoreNumeric;
+  // --- SEZIONE 1: Vecchi campi per retrocompatibilità ---
+  // Questi campi vengono mantenuti per non rompere i widget esistenti (es. MainHeroModule)
+  // Saranno progressivamente eliminati man mano che refattorizziamo.
+  final String giornoNome, giornoData, meteoIcon, temperaturaAvg, tempMinMax;
+  final String ventoDati, pressione, umidita, mare, altaMarea, bassaMarea;
+  final String faseLunare, alba, tramonto, finestraMattino, finestraSera;
   final List<ScoreReason> pescaScoreReasons;
   final List<Map<String, dynamic>> hourlyData;
   final List<Map<String, dynamic>> weeklyData;
   final List<Map<String, dynamic>> hourlyScores;
-  // --- NUOVI CAMPI AGGIUNTI ---
-  final String sunriseTime;
+
+  // --- SEZIONE 2: Nuovi campi per funzionalità avanzate ---
+  // Dati PURI (numerici) usati dai nuovi widget (es. WeeklyForecast)
+  final double pescaScoreNumeric;
+  final double temperaturaMax;
+  final double temperaturaMin;
+  final String trendPressione;
+  final String dailyWeatherCode;
+  final int dailyHumidity;
+  final int dailyPressure;
+  final int dailyWindSpeedKn;
+  final int dailyWindDirectionDegrees;
+  final String sunriseTime; // Orari puliti senza icone
   final String sunsetTime;
-  final String moonPhase;
-  // --- FINE NUOVO CODICE ---
+  final String moonPhase; // Testo pulito per il mapper
 
   ForecastData({
+    // Sezione 1
     required this.giornoNome,
     required this.giornoData,
     required this.meteoIcon,
@@ -66,61 +67,65 @@ class ForecastData {
     required this.tramonto,
     required this.finestraMattino,
     required this.finestraSera,
-    required this.pescaScoreNumeric,
     required this.pescaScoreReasons,
     required this.hourlyData,
     required this.weeklyData,
     required this.hourlyScores,
-    // --- NUOVI CAMPI NEL COSTRUTTORE ---
+    // Sezione 2
+    required this.pescaScoreNumeric,
+    required this.temperaturaMax,
+    required this.temperaturaMin,
+    required this.trendPressione,
+    required this.dailyWeatherCode,
+    required this.dailyHumidity,
+    required this.dailyPressure,
+    required this.dailyWindSpeedKn,
+    required this.dailyWindDirectionDegrees,
     required this.sunriseTime,
     required this.sunsetTime,
     required this.moonPhase,
-    // --- FINE NUOVO CODICE ---
   });
 
   factory ForecastData.fromJson(
       Map<String, dynamic> json, List<Map<String, dynamic>> weeklyData) {
+    /// FUNZIONE HELPER ROBUSTA PER IL PARSING
+    /// Converte in modo sicuro qualsiasi valore (num, String, null) in un numero.
     num safeParseNum(dynamic value) {
       if (value is num) return value;
       if (value is String) return num.tryParse(value) ?? 0;
       return 0;
     }
 
-    final tempAvgNum = safeParseNum(json['temperaturaAvg']);
-    final tempMinNum = safeParseNum(json['temperaturaMin']);
-    final tempMaxNum = safeParseNum(json['temperaturaMax']);
+    if (kDebugMode) {
+      print(
+          '[ForecastData Log] Parsing JSON per giorno: ${json['giornoData']}');
+    }
 
+    final scoreData = json['pescaScoreData'] as Map<String, dynamic>? ?? {};
     final maree = json['maree']?.toString() ?? 'Alta: N/D | Bassa: N/D';
     final mareeParts = maree.split('|');
 
-    final scoreData = json['pescaScoreData'] as Map<String, dynamic>? ?? {};
-    print('[ForecastData fromJson DEBUG] Contenuto di scoreData: $scoreData');
-
-    final reasonsList = scoreData['reasons'] as List<dynamic>? ?? [];
-    final hourlyScoresList = scoreData['hourlyScores'] as List<dynamic>? ?? [];
-
-    final rawHourly = json['hourly'] as List<dynamic>? ?? [];
-    final hourlyDataParsed =
-        rawHourly.whereType<Map<String, dynamic>>().toList();
-
-    print(
-        '[ForecastData Log] Dati JSON ricevuti per il giorno ${json['giornoData']}:');
-    print('[ForecastData Log]   sunriseTime: ${json['sunriseTime']}');
-    print('[ForecastData Log]   sunsetTime: ${json['sunsetTime']}');
-    print('[ForecastData Log]   moonPhase: ${json['moonPhase']}');
-
     return ForecastData(
+      // Sezione 1: Campi String legacy
       giornoNome: json['giornoNome']?.toString() ?? 'N/D',
       giornoData: json['giornoData']?.toString() ?? 'N/D',
       meteoIcon: json['meteoIcon']?.toString() ?? '❓',
-      temperaturaAvg: tempAvgNum.round().toString(),
-      tempMinMax: 'Max: ${tempMaxNum.round()}° Min: ${tempMinNum.round()}°',
+      temperaturaAvg: safeParseNum(json['temperaturaAvg']).round().toString(),
+      tempMinMax:
+          'Max: ${safeParseNum(json['temperaturaMax']).round()}° Min: ${safeParseNum(json['temperaturaMin']).round()}°',
       ventoDati: json['ventoDati']?.toString() ?? 'N/D',
       pressione:
           "${json['pressione']?.toString() ?? 'N/D'} hPa ${json['trendPressione']?.toString() ?? ''}",
       umidita: '${json['umidita']?.toString() ?? 'N/D'}%',
-      mare:
-          "${json['acronimoMare']?.toString() ?? ''} ${json['temperaturaAcqua']?.toString() ?? ''}° ${json['velocitaCorrente']?.toString() ?? ''} kn",
+
+// --- NUOVO CODICE DA INCOLLARE (IN SOSTITUZIONE DELLA RIGA `mare:`) ---
+      // Logica di fallback robusta: Prova a leggere la nuova chiave 'mare'.
+      // Se non c'è (cache vecchia), la ricostruisce con i vecchi campi.
+      mare: json['mare']?.toString() ??
+          '${json['acronimoMare']?.toString() ?? ""} ${json['temperaturaAcqua']?.toString() ?? ""}° ${json['velocitaCorrente']?.toString() ?? ""} kn'
+              .trim(),
+// --- FINE NUOVO CODICE ---
+
       altaMarea: mareeParts.isNotEmpty
           ? mareeParts[0].replaceFirst('Alta:', '').trim()
           : 'N/D',
@@ -137,19 +142,33 @@ class ForecastData {
       finestraSera: (json['finestraSera'] as Map<String, dynamic>)?['orario']
               ?.toString() ??
           'N/D',
-      pescaScoreNumeric: safeParseNum(scoreData['numericScore']).toDouble(),
-      pescaScoreReasons: reasonsList
+      pescaScoreReasons: ((scoreData['reasons'] as List?) ?? [])
           .whereType<Map<String, dynamic>>()
           .map((r) => ScoreReason.fromJson(r))
           .toList(),
-      hourlyScores: hourlyScoresList.whereType<Map<String, dynamic>>().toList(),
-      hourlyData: hourlyDataParsed,
+      hourlyData: ((json['hourly'] as List?) ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
       weeklyData: weeklyData,
-      // --- MAPPATURA NUOVI CAMPI DA JSON ---
-      sunriseTime: json['sunriseTime'] as String? ?? 'N/D',
-      sunsetTime: json['sunsetTime'] as String? ?? 'N/D',
-      moonPhase: json['moonPhase'] as String? ?? 'N/D',
-      // --- FINE NUOVO CODICE ---
+      hourlyScores: ((scoreData['hourlyScores'] as List?) ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+
+      // --- Sezione 2: Campi PURI, PARSATI IN MODO SICURO ---
+      pescaScoreNumeric: safeParseNum(scoreData['numericScore']).toDouble(),
+      temperaturaMax: safeParseNum(json['temperaturaMax']).toDouble(),
+      temperaturaMin: safeParseNum(json['temperaturaMin']).toDouble(),
+      trendPressione: json['trendPressione'] as String? ?? '→',
+      dailyWeatherCode: json['dailyWeatherCode'] as String? ?? '0',
+      dailyHumidity: safeParseNum(json['dailyHumidity']).toInt(),
+      dailyPressure: safeParseNum(json['dailyPressure']).toInt(),
+      dailyWindSpeedKn: safeParseNum(json['dailyWindSpeedKn']).toInt(),
+      dailyWindDirectionDegrees:
+          safeParseNum(json['dailyWindDirectionDegrees']).toInt(),
+      sunriseTime:
+          json['sunriseTime'] as String? ?? 'N/D', // Nuovo campo pulito
+      sunsetTime: json['sunsetTime'] as String? ?? 'N/D', // Nuovo campo pulito
+      moonPhase: json['moonPhase'] as String? ?? 'N/D', // Nuovo campo pulito
     );
   }
 

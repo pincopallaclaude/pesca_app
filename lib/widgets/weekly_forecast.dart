@@ -1,85 +1,183 @@
 import 'package:flutter/material.dart';
-import '../widgets/glassmorphism_card.dart'; // Potrebbe essere usata se non è un child di un'altra card
+import 'dart:math' as math; // Import per la rotazione (pi)
+import '../models/forecast_data.dart';
+import '../utils/weather_icon_mapper.dart';
+import 'glassmorphism_card.dart';
+import 'package:weather_icons/weather_icons.dart';
 
+/// Un widget che mostra le previsioni settimanali in una tabella dati
+/// scrollabile orizzontalmente, progettata per la massima densità di informazioni ("Power User").
 class WeeklyForecast extends StatelessWidget {
-  final List<Map<String, dynamic>> weeklyData;
+  final List<ForecastData> forecastData;
 
-  const WeeklyForecast({required this.weeklyData, super.key});
+  const WeeklyForecast({super.key, required this.forecastData});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-        children:
-            weeklyData.map((data) => _buildWeeklyRow(context, data)).toList());
-  }
-
-  Widget _buildWeeklyRow(BuildContext context, Map<String, dynamic> data) {
-    // Estrai i dati con un cast sicuro
-    final dayName = data['day'] as String? ?? 'N/D';
-    final icon = data['icon'] as IconData? ?? Icons.help_outline;
-    final iconColor = data['icon_color'] as Color? ?? Colors.white;
-
-    // --- CORREZIONE DEFINITIVA QUI ---
-    // Leggiamo i valori come 'num' generico per accettare sia int che double,
-    // poi li arrotondiamo a 'int' per la UI.
-    final minTemp = (data['min'] as num?)?.round() ?? 0;
-    final maxTemp = (data['max'] as num?)?.round() ?? 0;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10.0),
-      child: Row(
+    return GlassmorphismCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-              flex: 3,
-              child: Text(dayName,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w500))),
-          Expanded(flex: 2, child: Icon(icon, color: iconColor, size: 28)),
-          Expanded(
-              flex: 2,
-              child: Text("$minTemp°",
-                  style: const TextStyle(fontSize: 18, color: Colors.white70))),
-          Expanded(flex: 5, child: _buildTempBar(minTemp, maxTemp)),
-          Expanded(
-              flex: 2,
-              child: Text("$maxTemp°",
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w500)))
+          const Padding(
+            padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
+            child: Text(
+              "PREVISIONI A 7 GIORNI",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ),
+          const Divider(color: Colors.white24, height: 1),
+          // ScrollView per permettere lo scorrimento orizzontale dei dati
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: forecastData
+                  .map((dayData) => _buildForecastRow(context, dayData))
+                  .toList(),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTempBar(int min, int max) {
-    const double totalMin = 10, totalMax = 35, totalRange = totalMax - totalMin;
-    double startFraction = (min - totalMin) / totalRange;
-    double widthFraction = (max - min) / totalRange;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Container(
-        height: 5,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(2.5),
-        ),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: 1.0,
-            child: Container(
-              margin:
-                  EdgeInsets.only(left: 100 * startFraction.clamp(0.0, 1.0)),
-              width: 100 * widthFraction.clamp(0.0, 1.0),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(2.5),
-                gradient: const LinearGradient(
-                    colors: [Colors.cyan, Colors.yellow, Colors.orange]),
-              ),
-            ),
-          ),
+  /// Costruisce una singola riga della tabella delle previsioni, ora compatta e ricca di icone.
+  Widget _buildForecastRow(BuildContext context, ForecastData data) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14.0),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.1), width: 1.0),
         ),
       ),
+      child: Row(
+        children: [
+          _buildTableCell(
+            Text(data.giornoNome.toUpperCase()),
+            width: 55,
+          ),
+          _buildTableCell(
+            _buildScoreCell(
+                data.pescaScoreNumeric.round()), // Nuovo widget compatto
+            width: 60,
+          ),
+          _buildTableCell(
+            BoxedIcon(
+              getWeatherIcon(data.dailyWeatherCode, isDay: true),
+              color: getWeatherIconColor(data.dailyWeatherCode, isDay: true),
+              size: 28,
+            ),
+            width: 45,
+          ),
+          _buildTableCell(
+            _buildTempCell(data.temperaturaMax,
+                data.temperaturaMin), // Nuovo widget compatto
+            width: 45,
+          ),
+          _buildTableCell(
+            _buildWindCell(data.dailyWindSpeedKn,
+                data.dailyWindDirectionDegrees), // Nuovo widget compatto
+            width: 70,
+          ),
+          _buildTableCell(
+            _buildHumidityCell(data.dailyHumidity), // Nuovo widget compatto
+            width: 70,
+          ),
+          _buildTableCell(
+            _buildPressureCell(data.dailyPressure,
+                data.trendPressione), // Nuovo widget compatto
+            width: 90,
+          ),
+        ],
+      ),
     );
+  }
+
+  // --- NUOVI WIDGET "HELPER" PER LE CELLE COMPATTE ---
+
+  Widget _buildScoreCell(int score) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.phishing, color: Colors.cyan, size: 20),
+          const SizedBox(width: 6),
+          Text(score.toString(),
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ],
+      );
+
+  Widget _buildTempCell(double max, double min) => Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text("${max.round()}°",
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text("${min.round()}°",
+              style: const TextStyle(color: Colors.white70)),
+        ],
+      );
+
+  Widget _buildWindCell(int speed, int degrees) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // L'icona viene ruotata in base ai gradi forniti dal backend
+          Transform.rotate(
+            angle: (degrees * math.pi / 180) +
+                (math
+                    .pi), // Aggiungiamo 180° (pi) perché l'icona 'navigation' punta in su di default
+            child: const Icon(Icons.navigation, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 5),
+          Text("$speed kn",
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      );
+
+  Widget _buildHumidityCell(int humidity) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.water_drop_outlined,
+              color: Colors.blue.shade200, size: 18),
+          const SizedBox(width: 5),
+          Text("$humidity%",
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      );
+
+  Widget _buildPressureCell(int pressure, String trend) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text("$pressure hPa",
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(width: 5),
+          _getPressureTrendIcon(trend),
+        ],
+      );
+
+  /// Widget helper per creare una "cella" della tabella con una larghezza fissa.
+  Widget _buildTableCell(Widget child, {required double width}) {
+    return SizedBox(
+      width: width,
+      child: Center(child: child),
+    );
+  }
+
+  /// Helper per mappare il carattere del trend di pressione a un'icona.
+  Widget _getPressureTrendIcon(String trend) {
+    switch (trend) {
+      case '↑':
+        return const Icon(Icons.arrow_upward, color: Colors.white70, size: 20);
+      case '↓':
+        return const Icon(Icons.arrow_downward, color: Colors.cyan, size: 20);
+      default:
+        return const Icon(Icons.arrow_forward, color: Colors.white70, size: 20);
+    }
   }
 }

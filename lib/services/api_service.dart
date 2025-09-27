@@ -28,8 +28,10 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     //const cacheVersion =
     //    '_v2.3'; // Incrementa la versione per invalidare la cache vecchia
-    final packageInfo = await PackageInfo.fromPlatform();
-    final cacheVersion = '_v${packageInfo.version}';
+    final String randomCacheBuster =
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final cacheVersion = '_debug_${randomCacheBuster}';
+    print('[ApiService Log] CACHE BUSTER ATTIVO: $cacheVersion');
     final cacheKey = 'forecast_$location$cacheVersion';
     final cacheTimestampKey = 'timestamp_$location$cacheVersion';
     final cachedData = prefs.getString(cacheKey);
