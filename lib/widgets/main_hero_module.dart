@@ -16,6 +16,11 @@ class MainHeroModule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('[MainHeroModule Render Log] Giorno: ${data.giornoData}');
+    print('[MainHeroModule Render Log]   Alba: ${data.sunriseTime}');
+    print('[MainHeroModule Render Log]   Tramonto: ${data.sunsetTime}');
+    print('[MainHeroModule Render Log]   Fase Lunare: ${data.moonPhase}');
+
     return GlassmorphismCard(
       child: Column(children: [
         Row(
@@ -71,6 +76,34 @@ class MainHeroModule extends StatelessWidget {
                 fontSize: 16,
                 color: Colors.white70,
                 fontWeight: FontWeight.w500)),
+
+        const SizedBox(height: 12),
+        IconTheme(
+          data: IconThemeData(color: Colors.white.withOpacity(0.8), size: 18),
+          child: DefaultTextStyle(
+            style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.8),
+                letterSpacing: 0.5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              // Spaziamo equamente i tre gruppi (alba, luna, tramonto)
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(WeatherIcons.sunrise),
+                const SizedBox(width: 6),
+                Text(data.sunriseTime),
+                const SizedBox(width: 20), // Spaziatura centrale
+                Icon(getMoonPhaseIcon(data.moonPhase)),
+                const SizedBox(width: 20), // Spaziatura centrale
+                const Icon(WeatherIcons.sunset),
+                const SizedBox(width: 6),
+                Text(data.sunsetTime),
+              ],
+            ),
+          ),
+        ),
+
         const SizedBox(height: 20),
         GestureDetector(
           onLongPress: () =>

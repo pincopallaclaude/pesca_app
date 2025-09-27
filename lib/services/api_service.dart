@@ -6,6 +6,7 @@ import '../models/forecast_data.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class NetworkErrorWithStaleDataException implements Exception {
   final String staleJsonData;
@@ -25,8 +26,10 @@ class ApiService {
 
   Future<List<ForecastData>> fetchForecastData(String location) async {
     final prefs = await SharedPreferences.getInstance();
-    const cacheVersion =
-        '_v2.2'; // Incrementa la versione per invalidare la cache vecchia
+    //const cacheVersion =
+    //    '_v2.3'; // Incrementa la versione per invalidare la cache vecchia
+    final packageInfo = await PackageInfo.fromPlatform();
+    final cacheVersion = '_v${packageInfo.version}';
     final cacheKey = 'forecast_$location$cacheVersion';
     final cacheTimestampKey = 'timestamp_$location$cacheVersion';
     final cachedData = prefs.getString(cacheKey);

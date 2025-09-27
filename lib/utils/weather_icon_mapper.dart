@@ -133,7 +133,7 @@ Color getWeatherIconColor(String weatherCode, {bool isDay = true}) {
     case 116:
     case 119:
     case 122:
-      return Colors.grey.shade300;
+      return Colors.grey.shade500;
     // Pioggia/Rovesci
     case 176:
     case 263:
@@ -174,4 +174,27 @@ Color getWeatherIconColor(String weatherCode, {bool isDay = true}) {
     default:
       return Colors.grey.shade400;
   }
+}
+
+/// Restituisce l'IconData corretta per la fase lunare
+/// basandosi sulla stringa di testo fornita dall'API.
+IconData getMoonPhaseIcon(String moonPhaseText) {
+  print('[WeatherMapper Log] Calcolo icona per fase lunare: "$moonPhaseText"');
+  // Normalizza la stringa per un matching robusto
+  final phase = moonPhaseText.toLowerCase().trim();
+
+  if (phase == 'new moon') return WeatherIcons.moon_new;
+  if (phase == 'waxing crescent') return WeatherIcons.moon_waxing_crescent_3;
+  if (phase == 'first quarter') return WeatherIcons.moon_first_quarter;
+  if (phase == 'waxing gibbous') return WeatherIcons.moon_waxing_gibbous_3;
+  if (phase == 'full moon') return WeatherIcons.moon_full;
+  if (phase == 'waning gibbous') return WeatherIcons.moon_waning_gibbous_3;
+  if (phase == 'last quarter' || phase == 'third quarter')
+    return WeatherIcons.moon_third_quarter; // Aggiunto 'last quarter'
+  if (phase == 'waning crescent') return WeatherIcons.moon_waning_crescent_3;
+
+  // Fallback se il testo è vuoto o non riconosciuto
+  print(
+      '[WeatherMapper Log] Fase lunare non riconosciuta: "$phase". Uso fallback.');
+  return WeatherIcons.na;
 }

@@ -33,6 +33,7 @@ class ForecastData {
       mare,
       altaMarea,
       bassaMarea,
+      faseLunare,
       alba,
       tramonto,
       finestraMattino,
@@ -42,6 +43,11 @@ class ForecastData {
   final List<Map<String, dynamic>> hourlyData;
   final List<Map<String, dynamic>> weeklyData;
   final List<Map<String, dynamic>> hourlyScores;
+  // --- NUOVI CAMPI AGGIUNTI ---
+  final String sunriseTime;
+  final String sunsetTime;
+  final String moonPhase;
+  // --- FINE NUOVO CODICE ---
 
   ForecastData({
     required this.giornoNome,
@@ -55,6 +61,7 @@ class ForecastData {
     required this.mare,
     required this.altaMarea,
     required this.bassaMarea,
+    required this.faseLunare,
     required this.alba,
     required this.tramonto,
     required this.finestraMattino,
@@ -64,6 +71,11 @@ class ForecastData {
     required this.hourlyData,
     required this.weeklyData,
     required this.hourlyScores,
+    // --- NUOVI CAMPI NEL COSTRUTTORE ---
+    required this.sunriseTime,
+    required this.sunsetTime,
+    required this.moonPhase,
+    // --- FINE NUOVO CODICE ---
   });
 
   factory ForecastData.fromJson(
@@ -81,17 +93,21 @@ class ForecastData {
     final maree = json['maree']?.toString() ?? 'Alta: N/D | Bassa: N/D';
     final mareeParts = maree.split('|');
 
-    // Leggiamo l'oggetto scoreData in modo sicuro
     final scoreData = json['pescaScoreData'] as Map<String, dynamic>? ?? {};
     print('[ForecastData fromJson DEBUG] Contenuto di scoreData: $scoreData');
 
-    // Estraiamo entrambe le liste in modo sicuro
     final reasonsList = scoreData['reasons'] as List<dynamic>? ?? [];
     final hourlyScoresList = scoreData['hourlyScores'] as List<dynamic>? ?? [];
 
     final rawHourly = json['hourly'] as List<dynamic>? ?? [];
     final hourlyDataParsed =
         rawHourly.whereType<Map<String, dynamic>>().toList();
+
+    print(
+        '[ForecastData Log] Dati JSON ricevuti per il giorno ${json['giornoData']}:');
+    print('[ForecastData Log]   sunriseTime: ${json['sunriseTime']}');
+    print('[ForecastData Log]   sunsetTime: ${json['sunsetTime']}');
+    print('[ForecastData Log]   moonPhase: ${json['moonPhase']}');
 
     return ForecastData(
       giornoNome: json['giornoNome']?.toString() ?? 'N/D',
@@ -111,6 +127,7 @@ class ForecastData {
       bassaMarea: mareeParts.length > 1
           ? mareeParts[1].replaceFirst('Bassa:', '').trim()
           : 'N/D',
+      faseLunare: json['faseLunare']?.toString() ?? 'N/D',
       alba: json['alba']?.toString()?.replaceFirst('☀️', '').trim() ?? 'N/D',
       tramonto: json['tramonto']?.toString() ?? 'N/D',
       finestraMattino:
@@ -121,7 +138,6 @@ class ForecastData {
               ?.toString() ??
           'N/D',
       pescaScoreNumeric: safeParseNum(scoreData['numericScore']).toDouble(),
-      // Mappiamo le liste filtrate e sicure
       pescaScoreReasons: reasonsList
           .whereType<Map<String, dynamic>>()
           .map((r) => ScoreReason.fromJson(r))
@@ -129,6 +145,11 @@ class ForecastData {
       hourlyScores: hourlyScoresList.whereType<Map<String, dynamic>>().toList(),
       hourlyData: hourlyDataParsed,
       weeklyData: weeklyData,
+      // --- MAPPATURA NUOVI CAMPI DA JSON ---
+      sunriseTime: json['sunriseTime'] as String? ?? 'N/D',
+      sunsetTime: json['sunsetTime'] as String? ?? 'N/D',
+      moonPhase: json['moonPhase'] as String? ?? 'N/D',
+      // --- FINE NUOVO CODICE ---
     );
   }
 

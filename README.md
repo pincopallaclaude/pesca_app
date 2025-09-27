@@ -5,6 +5,7 @@
 
 
 
+
 <!-- SCRIPT:START -->
 ======================================================================
      PROMPT DI CONTESTO: APPLICAZIONE METEO PESCA (REVISIONE CORRENTE)
@@ -206,7 +207,6 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- .gitignore
 |-- test/ # Contiene i file per i test automatici.
 |   |-- widget_test.dart
-|-- tools/ # Sottocartella.
 |-- web/ # Codice sorgente per la versione web.
 |   |-- icons/
 |   |-- favicon.png
@@ -268,6 +268,7 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 ```
 
 <!-- SCRIPT:END -->
+
 
 
 
