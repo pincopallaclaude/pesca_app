@@ -5,8 +5,8 @@ import 'package:weather_icons/weather_icons.dart';
 
 /// Restituisce l'IconData corretta per un dato codice meteo.
 IconData getWeatherIcon(String weatherCode, {bool isDay = true}) {
-  print(
-      '[WeatherMapper Log] Calcolo icona per codice: $weatherCode, isDay: $isDay');
+  //print(
+  //    '[WeatherMapper Log] Calcolo icona per codice: $weatherCode, isDay: $isDay');
   final int code = int.tryParse(weatherCode) ?? 0;
 
   switch (code) {
@@ -77,8 +77,8 @@ IconData getWeatherIcon(String weatherCode, {bool isDay = true}) {
 /// Restituisce il colore appropriato per l'icona meteo in base
 /// al codice e al contesto (giorno/notte) per garantire il contrasto.
 Color getWeatherIconColor(String weatherCode, {bool isDay = true}) {
-  print(
-      '[WeatherMapper Log] Calcolo colore per codice: $weatherCode, isDay: $isDay');
+  //print(
+  //    '[WeatherMapper Log] Calcolo colore per codice: $weatherCode, isDay: $isDay');
   final int code = int.tryParse(weatherCode) ?? 0;
 
   // Se è notte, la maggior parte delle icone saranno chiare per contrasto.
@@ -179,7 +179,7 @@ Color getWeatherIconColor(String weatherCode, {bool isDay = true}) {
 /// Restituisce l'IconData corretta per la fase lunare
 /// basandosi sulla stringa di testo fornita dall'API.
 IconData getMoonPhaseIcon(String moonPhaseText) {
-  print('[WeatherMapper Log] Calcolo icona per fase lunare: "$moonPhaseText"');
+  //print('[WeatherMapper Log] Calcolo icona per fase lunare: "$moonPhaseText"');
   // Normalizza la stringa per un matching robusto
   final phase = moonPhaseText.toLowerCase().trim();
 
@@ -194,7 +194,7 @@ IconData getMoonPhaseIcon(String moonPhaseText) {
   if (phase == 'waning crescent') return WeatherIcons.moon_waning_crescent_3;
 
   // Fallback se il testo è vuoto o non riconosciuto
-  print(
-      '[WeatherMapper Log] Fase lunare non riconosciuta: "$phase". Uso fallback.');
+  //print(
+  //    '[WeatherMapper Log] Fase lunare non riconosciuta: "$phase". Uso fallback.');
   return WeatherIcons.na;
 }

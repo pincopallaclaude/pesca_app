@@ -1,4 +1,3 @@
-// --- NUOVO CODICE DA INCOLLARE (IN SOSTITUZIONE DELL'INTERO FILE) ---
 // lib/screens/forecast_screen.dart
 
 import 'dart:ui';
@@ -268,7 +267,10 @@ class ForecastPage extends StatelessWidget {
             // **CORREZIONE CHIAMATA WEEKLY FORECAST**
             // Il widget WeeklyForecast ora riceve la lista completa e gestirà
             // al suo interno la logica per mostrare i giorni corretti.
-            WeeklyForecast(forecastData: allForecasts),
+            GlassmorphismCard(
+              title: "PREVISIONI A 7 GIORNI",
+              child: WeeklyForecast(forecastData: allForecasts),
+            ),
           ])),
         ),
       ],
