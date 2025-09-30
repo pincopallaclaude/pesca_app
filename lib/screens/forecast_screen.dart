@@ -15,21 +15,43 @@ import '../widgets/stale_data_dialog.dart';
 
 class ForecastScreen extends StatefulWidget {
   const ForecastScreen({super.key});
+
   @override
   State<ForecastScreen> createState() => _ForecastScreenState();
 }
 
+// ===================================================================
+// INIZIO DELLA CLASSE _ForecastScreenState
+// ===================================================================
 class _ForecastScreenState extends State<ForecastScreen> {
   Future<List<ForecastData>>? _forecastFuture;
   String _currentLocationName = "Posillipo";
   OverlayEntry? _searchOverlayEntry;
-  bool _isLoadingGps = false; // Nuovo stato per il caricamento GPS
-  final ApiService _apiService = ApiService(); // Istanza del servizio
+  bool _isLoadingGps = false;
+  final ApiService _apiService = ApiService();
+  final PageController _pageController = PageController();
+  int _currentPageIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _loadForecast('40.813238367880984,14.208889980642137', "Posillipo");
+
+    _pageController.addListener(() {
+      if (_pageController.page?.round() != _currentPageIndex) {
+        if (!mounted) return;
+        setState(() {
+          _currentPageIndex = _pageController.page!.round();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _searchOverlayEntry?.remove();
+    super.dispose();
   }
 
   void _loadForecast(String location, String name) {
@@ -153,7 +175,9 @@ class _ForecastScreenState extends State<ForecastScreen> {
                 }
 
                 final forecasts = snapshot.data!;
-                final backgroundPath = forecasts[0].backgroundImagePath;
+
+                final backgroundPath =
+                    forecasts[_currentPageIndex].backgroundImagePath;
 
                 return Stack(
                   fit: StackFit.expand,
@@ -185,18 +209,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
                         ),
                       ),
                     ),
-
-                    // **CORREZIONE LOGICA PAGEVIEW**
-                    // Ora il PageView passa alla ForecastPage sia il dato del giorno
-                    // corrente sia la lista completa per le previsioni settimanali.
                     PageView.builder(
+                      controller: _pageController,
                       itemCount: forecasts.length,
                       itemBuilder: (context, index) {
                         return ForecastPage(
-                          currentDayData:
-                              forecasts[index], // Dati del giorno corrente
-                          allForecasts:
-                              forecasts, // Tutta la lista di previsioni
+                          currentDayData: forecasts[index],
+                          allForecasts: forecasts,
                           locationName: _currentLocationName,
                           onSearchTap: _toggleSearchPanel,
                         );
@@ -209,11 +228,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
     );
   }
 }
+// ===================================================================
+// FINE DELLA CLASSE _ForecastScreenState
+// ===================================================================
 
 class ForecastPage extends StatelessWidget {
-  // **CORREZIONE DEI PARAMETRI**
   final ForecastData currentDayData;
-  final List<ForecastData> allForecasts; // Lista completa dei dati
+  final List<ForecastData> allForecasts;
   final String locationName;
   final VoidCallback onSearchTap;
 
@@ -255,7 +276,6 @@ class ForecastPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
           sliver: SliverList(
               delegate: SliverChildListDelegate([
-            // Il modulo principale usa i dati del giorno corrente
             MainHeroModule(data: currentDayData),
             const SizedBox(height: 20),
             GlassmorphismCard(
@@ -263,10 +283,6 @@ class ForecastPage extends StatelessWidget {
                 child: HourlyForecast(
                     hourlyData: currentDayData.hourlyForecastForDisplay)),
             const SizedBox(height: 20),
-
-            // **CORREZIONE CHIAMATA WEEKLY FORECAST**
-            // Il widget WeeklyForecast ora riceve la lista completa e gestirà
-            // al suo interno la logica per mostrare i giorni corretti.
             GlassmorphismCard(
               title: "PREVISIONI A 7 GIORNI",
               child: WeeklyForecast(forecastData: allForecasts),
@@ -277,5 +293,3 @@ class ForecastPage extends StatelessWidget {
     );
   }
 }
-
-// --- FINE NUOVO CODICE ---
