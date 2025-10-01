@@ -31,6 +31,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
   final ApiService _apiService = ApiService();
   final PageController _pageController = PageController();
   int _currentPageIndex = 0;
+  bool _isHourlyForecastExpanded = false; // Aggiunta la variabile di stato
 
   @override
   void initState() {
@@ -42,6 +43,8 @@ class _ForecastScreenState extends State<ForecastScreen> {
         if (!mounted) return;
         setState(() {
           _currentPageIndex = _pageController.page!.round();
+          // Reset dello stato di espansione quando si cambia pagina
+          _isHourlyForecastExpanded = false;
         });
       }
     });
@@ -218,6 +221,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
                           allForecasts: forecasts,
                           locationName: _currentLocationName,
                           onSearchTap: _toggleSearchPanel,
+                          // Passa lo stato al widget figlio
+                          isHourlyExpanded: _isHourlyForecastExpanded,
+                          onHourlyExpansionChanged: (isExpanded) {
+                            setState(() {
+                              _isHourlyForecastExpanded = isExpanded;
+                            });
+                          },
                         );
                       },
                     )
@@ -237,13 +247,18 @@ class ForecastPage extends StatelessWidget {
   final List<ForecastData> allForecasts;
   final String locationName;
   final VoidCallback onSearchTap;
+  final bool isHourlyExpanded;
+  final Function(bool) onHourlyExpansionChanged;
 
-  const ForecastPage(
-      {required this.currentDayData,
-      required this.allForecasts,
-      required this.locationName,
-      required this.onSearchTap,
-      super.key});
+  const ForecastPage({
+    required this.currentDayData,
+    required this.allForecasts,
+    required this.locationName,
+    required this.onSearchTap,
+    required this.isHourlyExpanded,
+    required this.onHourlyExpansionChanged,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -278,13 +293,24 @@ class ForecastPage extends StatelessWidget {
               delegate: SliverChildListDelegate([
             MainHeroModule(data: currentDayData),
             const SizedBox(height: 20),
+            // NUOVO CODICE DA INCOLLARE (IN SOSTITUZIONE DELLA VECCHIA CHIAMATA A HOURLYFORECAST)
             GlassmorphismCard(
-                title: "PREVISIONI NELLE PROSSIME ORE",
-                child: HourlyForecast(
-                    hourlyData: currentDayData.hourlyForecastForDisplay)),
+              title: "PREVISIONI NELLE PROSSIME ORE",
+              isExpandable: true,
+              isExpanded: isHourlyExpanded,
+              onHeaderTap: () => onHourlyExpansionChanged(!isHourlyExpanded),
+              // MODIFICATO: Usiamo lo stesso padding della card sottostante
+              padding: const EdgeInsets.all(20.0),
+              child: HourlyForecast(
+                hourlyData: currentDayData.hourlyForecastForDisplay,
+                isExpanded: isHourlyExpanded,
+              ),
+            ),
             const SizedBox(height: 20),
             GlassmorphismCard(
               title: "PREVISIONI A 7 GIORNI",
+              // INVARIATO: Questo padding è già corretto
+              padding: const EdgeInsets.all(20),
               child: WeeklyForecast(forecastData: allForecasts),
             ),
           ])),

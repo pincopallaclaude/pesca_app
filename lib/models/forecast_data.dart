@@ -24,8 +24,6 @@ class ScoreReason {
 
 class ForecastData {
   // --- SEZIONE 1: Vecchi campi per retrocompatibilità ---
-  // Questi campi vengono mantenuti per non rompere i widget esistenti (es. MainHeroModule)
-  // Saranno progressivamente eliminati man mano che refattorizziamo.
   final String giornoNome, giornoData, meteoIcon, temperaturaAvg, tempMinMax;
   final String ventoDati, pressione, umidita, mare, altaMarea, bassaMarea;
   final String faseLunare, alba, tramonto, finestraMattino, finestraSera;
@@ -35,7 +33,6 @@ class ForecastData {
   final List<Map<String, dynamic>> hourlyScores;
 
   // --- SEZIONE 2: Nuovi campi per funzionalità avanzate ---
-  // Dati PURI (numerici) usati dai nuovi widget (es. WeeklyForecast)
   final double pescaScoreNumeric;
   final double temperaturaMax;
   final double temperaturaMin;
@@ -45,9 +42,9 @@ class ForecastData {
   final int dailyPressure;
   final int dailyWindSpeedKn;
   final int dailyWindDirectionDegrees;
-  final String sunriseTime; // Orari puliti senza icone
+  final String sunriseTime; // Orari puliti
   final String sunsetTime;
-  final String moonPhase; // Testo pulito per il mapper
+  final String moonPhase;
 
   ForecastData({
     // Sezione 1
@@ -88,8 +85,6 @@ class ForecastData {
 
   factory ForecastData.fromJson(
       Map<String, dynamic> json, List<Map<String, dynamic>> weeklyData) {
-    /// FUNZIONE HELPER ROBUSTA PER IL PARSING
-    /// Converte in modo sicuro qualsiasi valore (num, String, null) in un numero.
     num safeParseNum(dynamic value) {
       if (value is num) return value;
       if (value is String) return num.tryParse(value) ?? 0;
@@ -97,7 +92,7 @@ class ForecastData {
     }
 
     if (kDebugMode) {
-      print(
+      debugPrint(
           '[ForecastData Log] Parsing JSON per giorno: ${json['giornoData']}');
     }
 
@@ -106,7 +101,6 @@ class ForecastData {
     final mareeParts = maree.split('|');
 
     return ForecastData(
-      // Sezione 1: Campi String legacy
       giornoNome: json['giornoNome']?.toString() ?? 'N/D',
       giornoData: json['giornoData']?.toString() ?? 'N/D',
       meteoIcon: json['meteoIcon']?.toString() ?? '❓',
@@ -117,15 +111,9 @@ class ForecastData {
       pressione:
           "${json['pressione']?.toString() ?? 'N/D'} hPa ${json['trendPressione']?.toString() ?? ''}",
       umidita: '${json['umidita']?.toString() ?? 'N/D'}%',
-
-// --- NUOVO CODICE DA INCOLLARE (IN SOSTITUZIONE DELLA RIGA `mare:`) ---
-      // Logica di fallback robusta: Prova a leggere la nuova chiave 'mare'.
-      // Se non c'è (cache vecchia), la ricostruisce con i vecchi campi.
       mare: json['mare']?.toString() ??
           '${json['acronimoMare']?.toString() ?? ""} ${json['temperaturaAcqua']?.toString() ?? ""}° ${json['velocitaCorrente']?.toString() ?? ""} kn'
               .trim(),
-// --- FINE NUOVO CODICE ---
-
       altaMarea: mareeParts.isNotEmpty
           ? mareeParts[0].replaceFirst('Alta:', '').trim()
           : 'N/D',
@@ -153,8 +141,6 @@ class ForecastData {
       hourlyScores: ((scoreData['hourlyScores'] as List?) ?? [])
           .whereType<Map<String, dynamic>>()
           .toList(),
-
-      // --- Sezione 2: Campi PURI, PARSATI IN MODO SICURO ---
       pescaScoreNumeric: safeParseNum(scoreData['numericScore']).toDouble(),
       temperaturaMax: safeParseNum(json['temperaturaMax']).toDouble(),
       temperaturaMin: safeParseNum(json['temperaturaMin']).toDouble(),
@@ -165,10 +151,9 @@ class ForecastData {
       dailyWindSpeedKn: safeParseNum(json['dailyWindSpeedKn']).toInt(),
       dailyWindDirectionDegrees:
           safeParseNum(json['dailyWindDirectionDegrees']).toInt(),
-      sunriseTime:
-          json['sunriseTime'] as String? ?? 'N/D', // Nuovo campo pulito
-      sunsetTime: json['sunsetTime'] as String? ?? 'N/D', // Nuovo campo pulito
-      moonPhase: json['moonPhase'] as String? ?? 'N/D', // Nuovo campo pulito
+      sunriseTime: json['sunriseTime'] as String? ?? 'N/D',
+      sunsetTime: json['sunsetTime'] as String? ?? 'N/D',
+      moonPhase: json['moonPhase'] as String? ?? 'N/D',
     );
   }
 
@@ -178,12 +163,11 @@ class ForecastData {
       return {
         'time': '--:--',
         'tempC': temperaturaAvg.replaceAll('°', ''),
-        'weatherCode': '0',
+        'weatherCode': '0'
       };
     }
-
     final now = DateTime.now();
-    final currentHour = hourlyData.firstWhere(
+    return hourlyData.firstWhere(
       (hour) {
         final hourTime =
             int.tryParse(hour['time']?.split(':')[0] ?? '-1') ?? -1;
@@ -191,7 +175,6 @@ class ForecastData {
       },
       orElse: () => hourlyData.last,
     );
-    return currentHour;
   }
 
   /// Restituisce la lista di previsioni orarie da mostrare nella riga orizzontale.
@@ -205,46 +188,139 @@ class ForecastData {
       if (hourStr == null) return false;
       final hourTime = int.tryParse(hourStr);
       if (hourTime == null) return false;
-      return hourTime > currentHourInt;
+      // Corretto per mostrare dall'ora corrente in poi
+      return hourTime >= currentHourInt;
     }).toList();
   }
 
   String get backgroundImagePath {
+    const rainyWeatherCodes = {
+      '176',
+      '263',
+      '266',
+      '281',
+      '284',
+      '293',
+      '296',
+      '299',
+      '302',
+      '305',
+      '308',
+      '311',
+      '314',
+      '353',
+      '356',
+      '359',
+      '386',
+      '389'
+    };
+    const snowyWeatherCodes = {
+      '179',
+      '182',
+      '185',
+      '227',
+      '230',
+      '323',
+      '326',
+      '329',
+      '332',
+      '335',
+      '338',
+      '368',
+      '371'
+    };
+
     try {
-      DateTime _parseTime(String timeStr) {
-        final now = DateTime.now();
+      // Funzione interna per un parsing sicuro dell'orario
+      DateTime? _parseTime(String timeStr) {
+        if (timeStr == 'N/D' || !timeStr.contains(':')) return null;
         final parts = timeStr.split(':');
-        return DateTime(now.year, now.month, now.day, int.parse(parts[0]),
-            int.parse(parts[1]));
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour == null || minute == null) return null;
+        final now = DateTime.now();
+        return DateTime(now.year, now.month, now.day, hour, minute);
       }
 
       final oraCorrente = DateTime.now();
-      final oraAlba = _parseTime(alba);
-      final oraTramonto = _parseTime(tramonto);
-      final unOraPrimaAlba = oraAlba.subtract(const Duration(hours: 1));
-      final unOraDopoAlba = oraAlba.add(const Duration(hours: 1));
-      final unOraPrimaTramonto = oraTramonto.subtract(const Duration(hours: 1));
-      final unOraDopoTramonto = oraTramonto.add(const Duration(hours: 1));
+      final oraAlba = _parseTime(sunriseTime);
+      final oraTramonto = _parseTime(sunsetTime);
 
-      if ((oraCorrente.isAfter(unOraPrimaAlba) &&
-              oraCorrente.isBefore(unOraDopoAlba)) ||
-          (oraCorrente.isAfter(unOraPrimaTramonto) &&
-              oraCorrente.isBefore(unOraDopoTramonto))) {
-        return 'assets/background_sunset.jpg';
+      // Estraiamo il codice meteo dell'ora attuale per priorità massima
+      final currentHourWeatherCode = currentHourData['weatherCode']?.toString();
+
+      // Log di Debug Avanzato
+      if (kDebugMode) {
+        debugPrint("\n--- [BACKGROUND DEBUG] Inizio Analisi ---");
+        debugPrint("[BACKGROUND DEBUG] Ora Corrente: $oraCorrente");
+        debugPrint(
+            "[BACKGROUND DEBUG] Dati Orari: sunriseTime='$sunriseTime', sunsetTime='$sunsetTime'");
+        debugPrint(
+            "[BACKGROUND DEBUG] Codici Meteo: currentHourWeatherCode='$currentHourWeatherCode', dailyWeatherCode='$dailyWeatherCode'");
+        debugPrint(
+            "[BACKGROUND DEBUG] Orari Parsati: oraAlba=$oraAlba, oraTramonto=$oraTramonto");
+        debugPrint("--- Fine Analisi ---\n");
       }
-      if (oraCorrente.isBefore(oraAlba) || oraCorrente.isAfter(oraTramonto)) {
-        return 'assets/background_nocturnal.jpg';
+
+      // 1. GESTIONE ORARI: Se i dati di alba/tramonto non sono validi, la logica oraria non può funzionare.
+      if (oraAlba == null || oraTramonto == null) {
+        if (kDebugMode)
+          debugPrint(
+              "[BACKGROUND DEBUG] --> DECISIONE: Parsing alba/tramonto fallito. Controllo solo meteo.");
+        // Controlliamo almeno se piove basandoci sul codice orario attuale
+        if (currentHourWeatherCode != null &&
+            rainyWeatherCodes.contains(currentHourWeatherCode)) {
+          return 'assets/background_rainy.jpg';
+        }
+        return 'assets/background_daily.jpg'; // Fallback più sicuro
       }
-      final condizioneMeteo = meteoIcon.toLowerCase();
-      if (condizioneMeteo.contains('rain') ||
-          condizioneMeteo.contains('shower') ||
-          condizioneMeteo.contains('thunder') ||
-          condizioneMeteo.contains('pioggia') ||
-          condizioneMeteo.contains('temporale')) {
+
+      // ========= NUOVA SEQUENZA DI IF GERARCHICA E ROBUSTA =========
+
+      // 2. CONDIZIONE METEO AVVERSO (MASSIMA PRIORITÀ): se piove o nevica ORA, mostro lo sfondo piovoso
+      //    indipendentemente dal fatto che sia giorno, tramonto o notte.
+      if (currentHourWeatherCode != null &&
+          (rainyWeatherCodes.contains(currentHourWeatherCode) ||
+              snowyWeatherCodes.contains(currentHourWeatherCode))) {
+        if (kDebugMode)
+          debugPrint(
+              "[BACKGROUND DEBUG] --> DECISIONE: METEO AVVERSO ATTUALE (Codice: $currentHourWeatherCode). Ritorno 'rainy'.");
         return 'assets/background_rainy.jpg';
       }
+
+      // 3. CONDIZIONE NOTTE: se non piove, controlliamo se è notte.
+      final trentaMinutiDopoTramonto =
+          oraTramonto.add(const Duration(minutes: 30));
+      if (oraCorrente.isBefore(oraAlba) ||
+          oraCorrente.isAfter(trentaMinutiDopoTramonto)) {
+        if (kDebugMode)
+          debugPrint(
+              "[BACKGROUND DEBUG] --> DECISIONE: Condizione NOCTURNAL soddisfatta.");
+        return 'assets/background_nocturnal.jpg';
+      }
+
+      // 4. CONDIZIONE TRAMONTO/ALBA: se non è notte e non piove, controlliamo le "golden hours".
+      // L'alba è considerata 1 ora prima fino a 1 ora dopo.
+      // Il tramonto è considerato 1 ora prima fino al tramonto (la fase 'notte' inizia 30 min dopo).
+      final unOraPrimaTramonto = oraTramonto.subtract(const Duration(hours: 1));
+      final unOraDopoAlba = oraAlba.add(const Duration(hours: 1));
+      if (oraCorrente.isAfter(unOraPrimaTramonto) ||
+          oraCorrente.isBefore(unOraDopoAlba)) {
+        if (kDebugMode)
+          debugPrint(
+              "[BACKGROUND DEBUG] --> DECISIONE: Condizione SUNSET/SUNRISE soddisfatta.");
+        return 'assets/background_sunset.jpg';
+      }
+
+      // 5. FALLBACK DIURNO: se nessuna delle condizioni precedenti è vera, allora è giorno con tempo sereno/variabile.
+      if (kDebugMode)
+        debugPrint(
+            "[BACKGROUND DEBUG] --> DECISIONE: Fallback 'daily' finale.");
       return 'assets/background_daily.jpg';
     } catch (e) {
+      if (kDebugMode)
+        debugPrint(
+            "[BACKGROUND DEBUG] --> DECISIONE: ERRORE CATCH GLOBALE: $e.");
       return 'assets/background_daily.jpg';
     }
   }
