@@ -106,8 +106,7 @@ class MainHeroModule extends StatelessWidget {
 
         const SizedBox(height: 20),
         GestureDetector(
-          onLongPress: () =>
-              showScoreDetailsDialog(context, data.pescaScoreReasons),
+          onLongPress: () => showScoreDetailsDialog(context, data),
           child: FishingScoreIndicator(score: data.pescaScoreNumeric),
         ),
         const SizedBox(height: 20),
@@ -182,11 +181,12 @@ class MainHeroModule extends StatelessWidget {
           if (!sconsigliato && scores.isNotEmpty) {
             print(
                 '[MainHeroModule Log] Tap su finestra di pesca. Mostro il grafico.');
+            // [CORREZIONE] Ripristinata la chiamata originale, semplice e funzionante.
             showScoreChartDialog(context, scores);
           }
         },
         child: Container(
-          color: Colors.transparent, // Rende l'intera area tappabile
+          color: Colors.transparent,
           child: Column(
             children: [
               Text(label,
