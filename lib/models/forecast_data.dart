@@ -100,12 +100,6 @@ class ForecastData {
     final maree = json['maree']?.toString() ?? 'Alta: N/D | Bassa: N/D';
     final mareeParts = maree.split('|');
 
-    final List<dynamic> dailyReasonsRaw = scoreData['reasons'] as List? ?? [];
-    if (kDebugMode && !scoreData.containsKey('reasons')) {
-      print(
-          "!!! ATTENZIONE: La chiave 'reasons' NON è presente in 'pescaScoreData' per il giorno ${json['giornoData']}. La lista sarà vuota. !!!");
-    }
-
     return ForecastData(
       giornoNome: json['giornoNome']?.toString() ?? 'N/D',
       giornoData: json['giornoData']?.toString() ?? 'N/D',
@@ -136,7 +130,7 @@ class ForecastData {
       finestraSera: (json['finestraSera'] as Map<String, dynamic>)?['orario']
               ?.toString() ??
           'N/D',
-      pescaScoreReasons: dailyReasonsRaw
+      pescaScoreReasons: ((scoreData['reasons'] as List?) ?? [])
           .whereType<Map<String, dynamic>>()
           .map((r) => ScoreReason.fromJson(r))
           .toList(),
@@ -163,6 +157,7 @@ class ForecastData {
     );
   }
 
+  /// Restituisce la previsione oraria più vicina al momento attuale.
   Map<String, dynamic> get currentHourData {
     if (hourlyData.isEmpty) {
       return {
@@ -182,6 +177,7 @@ class ForecastData {
     );
   }
 
+  /// Restituisce la lista di previsioni orarie da mostrare nella riga orizzontale.
   List<Map<String, dynamic>> get hourlyForecastForDisplay {
     if (hourlyData.isEmpty) return [];
     final now = DateTime.now();
@@ -192,6 +188,7 @@ class ForecastData {
       if (hourStr == null) return false;
       final hourTime = int.tryParse(hourStr);
       if (hourTime == null) return false;
+      // Corretto per mostrare dall'ora corrente in poi
       return hourTime >= currentHourInt;
     }).toList();
   }
@@ -234,6 +231,7 @@ class ForecastData {
     };
 
     try {
+      // Funzione interna per un parsing sicuro dell'orario
       DateTime? _parseTime(String timeStr) {
         if (timeStr == 'N/D' || !timeStr.contains(':')) return null;
         final parts = timeStr.split(':');
@@ -247,8 +245,11 @@ class ForecastData {
       final oraCorrente = DateTime.now();
       final oraAlba = _parseTime(sunriseTime);
       final oraTramonto = _parseTime(sunsetTime);
+
+      // Estraiamo il codice meteo dell'ora attuale per priorità massima
       final currentHourWeatherCode = currentHourData['weatherCode']?.toString();
 
+      // Log di Debug Avanzato
       if (kDebugMode) {
         debugPrint("\n--- [BACKGROUND DEBUG] Inizio Analisi ---");
         debugPrint("[BACKGROUND DEBUG] Ora Corrente: $oraCorrente");
@@ -261,17 +262,23 @@ class ForecastData {
         debugPrint("--- Fine Analisi ---\n");
       }
 
+      // 1. GESTIONE ORARI: Se i dati di alba/tramonto non sono validi, la logica oraria non può funzionare.
       if (oraAlba == null || oraTramonto == null) {
         if (kDebugMode)
           debugPrint(
               "[BACKGROUND DEBUG] --> DECISIONE: Parsing alba/tramonto fallito. Controllo solo meteo.");
+        // Controlliamo almeno se piove basandoci sul codice orario attuale
         if (currentHourWeatherCode != null &&
             rainyWeatherCodes.contains(currentHourWeatherCode)) {
           return 'assets/background_rainy.jpg';
         }
-        return 'assets/background_daily.jpg';
+        return 'assets/background_daily.jpg'; // Fallback più sicuro
       }
 
+      // ========= NUOVA SEQUENZA DI IF GERARCHICA E ROBUSTA =========
+
+      // 2. CONDIZIONE METEO AVVERSO (MASSIMA PRIORITÀ): se piove o nevica ORA, mostro lo sfondo piovoso
+      //    indipendentemente dal fatto che sia giorno, tramonto o notte.
       if (currentHourWeatherCode != null &&
           (rainyWeatherCodes.contains(currentHourWeatherCode) ||
               snowyWeatherCodes.contains(currentHourWeatherCode))) {
@@ -281,6 +288,7 @@ class ForecastData {
         return 'assets/background_rainy.jpg';
       }
 
+      // 3. CONDIZIONE NOTTE: se non piove, controlliamo se è notte.
       final trentaMinutiDopoTramonto =
           oraTramonto.add(const Duration(minutes: 30));
       if (oraCorrente.isBefore(oraAlba) ||
@@ -291,6 +299,9 @@ class ForecastData {
         return 'assets/background_nocturnal.jpg';
       }
 
+      // 4. CONDIZIONE TRAMONTO/ALBA: se non è notte e non piove, controlliamo le "golden hours".
+      // L'alba è considerata 1 ora prima fino a 1 ora dopo.
+      // Il tramonto è considerato 1 ora prima fino al tramonto (la fase 'notte' inizia 30 min dopo).
       final unOraPrimaTramonto = oraTramonto.subtract(const Duration(hours: 1));
       final unOraDopoAlba = oraAlba.add(const Duration(hours: 1));
       if (oraCorrente.isAfter(unOraPrimaTramonto) ||
@@ -301,6 +312,7 @@ class ForecastData {
         return 'assets/background_sunset.jpg';
       }
 
+      // 5. FALLBACK DIURNO: se nessuna delle condizioni precedenti è vera, allora è giorno con tempo sereno/variabile.
       if (kDebugMode)
         debugPrint(
             "[BACKGROUND DEBUG] --> DECISIONE: Fallback 'daily' finale.");

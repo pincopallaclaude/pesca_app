@@ -1,16 +1,12 @@
-// lib/screens/hourly_forecast.dart
+// lib/widgets/hourly_forecast.dart
 
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
-import '../models/forecast_data.dart';
-import '../utils/weather_icon_mapper.dart';
-import 'package:weather_icons/weather_icons.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:weather_icons/weather_icons.dart';
+import '../utils/weather_icon_mapper.dart';
 
-// ===============================================================
-// WIDGET RIUTILIZZABILE PER LA VISUALIZZAZIONE A "PILLOLA" (AGGIORNATO)
-// ===============================================================
 class DataPill extends StatelessWidget {
   final String value;
   final String unit;
@@ -25,10 +21,9 @@ class DataPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Aggiungiamo un colore di testo in contrasto per gli sfondi più scuri
     final isDarkBackground = backgroundColor.computeLuminance() < 0.4;
     final textColor =
-        isDarkBackground ? Colors.white : Colors.white.withOpacity(0.9);
+        isDarkBackground ? Colors.white : Colors.black.withOpacity(0.9);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -49,8 +44,8 @@ class DataPill extends StatelessWidget {
             TextSpan(
               text: ' $unit',
               style: TextStyle(
-                fontSize: 10, // Riduci la dimensione a 10
-                color: textColor.withOpacity(0.5), // Rendi l'unità PIÙ sbiadita
+                fontSize: 10,
+                color: textColor.withOpacity(0.5),
               ),
             ),
           ],
@@ -59,16 +54,17 @@ class DataPill extends StatelessWidget {
     );
   }
 }
-// ===============================================================
 
 class HourlyForecast extends StatefulWidget {
   final List<dynamic> hourlyData;
   final bool isExpanded;
+  final int? dayIndex;
 
   const HourlyForecast({
     super.key,
     required this.hourlyData,
     required this.isExpanded,
+    this.dayIndex,
   });
 
   @override
@@ -98,11 +94,8 @@ class _HourlyForecastState extends State<HourlyForecast>
     super.didUpdateWidget(oldWidget);
     if (widget.isExpanded != oldWidget.isExpanded) {
       if (widget.isExpanded) {
-        if (kDebugMode)
-          debugPrint("[ANIMATION DEBUG] Starting animation forward...");
         _animationController.forward(from: 0.0);
       } else {
-        if (kDebugMode) debugPrint("[ANIMATION DEBUG] Resetting animation...");
         _animationController.reset();
       }
     }
@@ -115,9 +108,6 @@ class _HourlyForecastState extends State<HourlyForecast>
     super.dispose();
   }
 
-  // --- FUNZIONI HELPER PER COLORI DINAMICI (HEAT MAP) ---
-
-  // Funzione helper per l'interpolazione lineare dei colori
   Color _lerpColor(
       Color minColor, Color maxColor, double value, double min, double max) {
     if (value <= min) return minColor;
@@ -126,67 +116,63 @@ class _HourlyForecastState extends State<HourlyForecast>
     return Color.lerp(minColor, maxColor, t)!;
   }
 
-  // --- NUOVO GRADIENTE LISCIO MULTI-STOP PER IL VENTO ---
   Color _getWindColor(double? speedKn) {
-    if (speedKn == null || speedKn < 1)
-      return Colors.white; // Bianco sotto 1 nodo
-    if (speedKn > 35)
-      return Colors.purple.shade900; // Colore massimo di allerta
-
-    // Definiamo i punti chiave del nostro gradiente
-    const Color green = Color(0xFF4CAF50); // Verde per venti leggeri (~5kn)
-    const Color yellow = Color(0xFFFFEB3B); // Giallo per venti moderati (~15kn)
-    const Color orange = Color(0xFFFF9800); // Arancione per venti tesi (~25kn)
-    const Color red = Color(0xFFF44336); // Rosso per venti forti (~35kn)
-
-    Color color;
-    if (speedKn < 10) {
-      color = _lerpColor(green, yellow, speedKn, 1, 10);
-    } else if (speedKn < 20) {
-      color = _lerpColor(yellow, orange, speedKn, 10, 20);
-    } else if (speedKn < 30) {
-      color = _lerpColor(orange, red, speedKn, 20, 30);
-    } else {
-      color = _lerpColor(red, Colors.purple.shade900, speedKn, 30, 35);
-    }
-
-    if (kDebugMode)
-      debugPrint(
-          "[WIND GRADIENT DEBUG] Speed: ${speedKn.toStringAsFixed(1)}kn -> Calculated Color: $color");
-    return color;
+    final safeSpeedKn = speedKn ?? 0.0;
+    if (safeSpeedKn < 1) return Colors.white;
+    if (safeSpeedKn > 35) return Colors.purple.shade900;
+    const Color green = Color(0xFF4CAF50);
+    const Color yellow = Color(0xFFFFEB3B);
+    const Color orange = Color(0xFFFF9800);
+    const Color red = Color(0xFFF44336);
+    if (safeSpeedKn < 10) return _lerpColor(green, yellow, safeSpeedKn, 1, 10);
+    if (safeSpeedKn < 20)
+      return _lerpColor(yellow, orange, safeSpeedKn, 10, 20);
+    if (safeSpeedKn < 30) return _lerpColor(orange, red, safeSpeedKn, 20, 30);
+    return _lerpColor(red, Colors.purple.shade900, safeSpeedKn, 30, 35);
   }
 
-  // --- GRADIENTE LISCIO PER LE ONDE (INVARIANTI NELLA LOGICA) ---
-  Color _getWaveColor(double? meters) {
-    if (meters == null) return Colors.transparent;
-    final medColor = Colors.blue.shade800.withOpacity(0.5);
-    final maxColor = Colors.indigo.shade300.withOpacity(0.8);
-
-    Color color = (meters < 0.5)
-        ? _lerpColor(Colors.transparent, medColor, meters, 0.0, 0.5)
-        : _lerpColor(medColor, maxColor, meters, 0.5, 1.5);
-
-    if (kDebugMode)
-      debugPrint("[HEATMAP DEBUG] Wave Height: ${meters}m -> Color: $color");
-    return color;
+  Color _getPrecipitationProbabilityColor(double? probability) {
+    if (probability == null || probability < 10) return Colors.white70;
+    return _lerpColor(Colors.white70, Colors.cyanAccent, probability, 10, 100);
   }
 
-  // --- GRADIENTE LISCIO PER LE PRECIPITAZIONI (INVARIANTI NELLA LOGICA) ---
-  Color _getPrecipitationColor(double? mm) {
+  Color _getNewPrecipitationColor(double? mm) {
     if (mm == null || mm < 0.1) return Colors.transparent;
-    final maxColor = Colors.cyan.shade200.withOpacity(0.8);
-    Color color = _lerpColor(Colors.transparent, maxColor, mm, 0.0, 2.5);
+    const medColor = Colors.blue;
+    const maxColor = Colors.indigo;
+    return (mm < 2.0)
+        ? _lerpColor(Colors.transparent, medColor, mm, 0.1, 2.0)
+        : _lerpColor(medColor, maxColor, mm, 2.0, 10.0);
+  }
 
-    if (kDebugMode)
-      debugPrint("[HEATMAP DEBUG] Precipitation: ${mm}mm -> Color: $color");
-    return color;
+  Color _getNewWaveColor(double? meters) {
+    if (meters == null || meters < 0.2) return Colors.transparent;
+    const lightWave = Color(0x9929B6F6);
+    const medWave = Color(0xB30091EA);
+    if (meters <= 1.0)
+      return _lerpColor(Colors.transparent, lightWave, meters, 0.2, 1.0);
+    return _lerpColor(lightWave, medWave, meters, 1.0, 2.5);
+  }
+
+  // [LA SOLUZIONE È QUI] Aggiunta della nuova funzione per l'umidità
+  Color _getHumidityColor(double? humidity) {
+    if (humidity == null) return Colors.white70;
+    const dryColor = Color(0xFFFBC02D);
+    const comfortColor = Colors.white70;
+    const humidColor = Color(0xFF4DD0E1);
+    const veryHumidColor = Color(0xFF26A69A);
+    if (humidity < 30)
+      return _lerpColor(dryColor, comfortColor, humidity, 0, 30);
+    if (humidity >= 30 && humidity <= 60) return comfortColor;
+    if (humidity > 60 && humidity <= 85)
+      return _lerpColor(comfortColor, humidColor, humidity, 60, 85);
+    return _lerpColor(humidColor, veryHumidColor, humidity, 85, 100);
   }
 
   @override
   Widget build(BuildContext context) {
     const double expandedHeight = 380.0;
     const double contractedHeight = 110.0;
-
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOut,
@@ -198,8 +184,12 @@ class _HourlyForecastState extends State<HourlyForecast>
     );
   }
 
-  // --- VISTA CONTRATTA (INVARIATA) ---
   Widget _buildContractedView() {
+    if (widget.hourlyData.isEmpty) {
+      return const Center(
+          child: Text('Nessun dato orario disponibile',
+              style: TextStyle(color: Colors.white70)));
+    }
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -207,25 +197,27 @@ class _HourlyForecastState extends State<HourlyForecast>
       itemCount: widget.hourlyData.length,
       itemBuilder: (context, index) {
         final hour = widget.hourlyData[index] as Map<String, dynamic>;
+        final time = (hour['time'] as String?)?.split(':')[0] ?? '--';
+        final weatherCode = hour['weatherCode'] as String? ?? '0';
+        final isDay = hour['isDay'] as bool? ?? true;
+        final tempC = (hour['tempC'] as num?)?.round() ?? 'N/A';
+
         return Container(
           width: 65,
           alignment: Alignment.center,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text((hour['time'] as String?)?.split(':')[0] ?? '--',
+              Text(time,
                   style: const TextStyle(color: Colors.white, fontSize: 14)),
               const SizedBox(height: 8),
               BoxedIcon(
-                getWeatherIcon(hour['weatherCode'] as String? ?? '0',
-                    isDay: hour['isDay'] as bool? ?? true),
-                color: getWeatherIconColor(
-                    hour['weatherCode'] as String? ?? '0',
-                    isDay: hour['isDay'] as bool? ?? true),
+                getWeatherIcon(weatherCode, isDay: isDay),
+                color: getWeatherIconColor(weatherCode, isDay: isDay),
                 size: 28,
               ),
               const SizedBox(height: 8),
-              Text("${(hour['tempC'] as num?)?.round() ?? 'N/A'}°",
+              Text("$tempC°",
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -237,8 +229,12 @@ class _HourlyForecastState extends State<HourlyForecast>
     );
   }
 
-  // --- VISTA ESPANSA (INVARIATA) ---
   Widget _buildExpandedView() {
+    if (widget.hourlyData.isEmpty) {
+      return const Center(
+          child: Text('Nessun dato orario disponibile',
+              style: TextStyle(color: Colors.white70)));
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -247,7 +243,7 @@ class _HourlyForecastState extends State<HourlyForecast>
           child: ListView.builder(
             controller: _scrollController,
             scrollDirection: Axis.horizontal,
-            physics: const PageScrollPhysics(),
+            physics: const BouncingScrollPhysics(),
             itemCount: widget.hourlyData.length,
             itemExtent: 70.0,
             itemBuilder: (context, index) {
@@ -260,13 +256,16 @@ class _HourlyForecastState extends State<HourlyForecast>
     );
   }
 
-  // --- COLONNA ETICHETTE (INVARIATA) ---
   Widget _buildLabelsColumn() {
     const double dataGridRowHeight = 28.0;
     const iconColor = Colors.white70;
     const secondaryIconColor = Colors.white38;
 
     final List<Widget> labelRows = [
+      const SizedBox(height: 105),
+      const Padding(
+          padding: EdgeInsets.symmetric(vertical: 4.0),
+          child: Divider(color: Colors.white24, height: 1)),
       SizedBox(
           height: dataGridRowHeight,
           child: Center(
@@ -317,24 +316,17 @@ class _HourlyForecastState extends State<HourlyForecast>
       physics: const NeverScrollableScrollPhysics(),
       child: Column(
         children: [
-          const SizedBox(height: 105),
-          const Padding(
-              padding: EdgeInsets.symmetric(vertical: 4.0),
-              child: Divider(color: Colors.white24, height: 1)),
           AnimationLimiter(
             child: Column(
-              children: List.generate(labelRows.length, (index) {
+              children: labelRows.map((row) {
+                final index = labelRows.indexOf(row);
                 return AnimationConfiguration.staggeredList(
                   position: index,
                   duration: const Duration(milliseconds: 250),
                   child: SlideAnimation(
-                    verticalOffset: 20.0,
-                    child: FadeInAnimation(
-                      child: labelRows[index],
-                    ),
-                  ),
+                      verticalOffset: 20.0, child: FadeInAnimation(child: row)),
                 );
-              }),
+              }).toList(),
             ),
           )
         ],
@@ -342,7 +334,6 @@ class _HourlyForecastState extends State<HourlyForecast>
     );
   }
 
-  // --- COLONNA DATI (ADATTATA CON NUOVO GRADIENTE VENTO) ---
   Widget _buildHourDataColumn(Map<String, dynamic> hour) {
     const double dataGridRowHeight = 28.0;
     const primaryDataStyle = TextStyle(
@@ -350,22 +341,22 @@ class _HourlyForecastState extends State<HourlyForecast>
     const secondaryDataStyle = TextStyle(
         color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold);
 
-    // Estrazione e arrotondamento dei dati
     final double waveHeight =
         ((hour['waveHeight'] as num? ?? 0.0) * 10).round() / 10.0;
     final double precipitation =
         ((hour['precipitation'] as num? ?? 0.0) * 10).round() / 10.0;
-
+    final double precipProbability =
+        (hour['precipitationProbability'] as num? ?? 0.0).toDouble();
     final double windSpeed = (hour['windSpeedKn'] as num? ?? 0.0).toDouble();
     final double windDirection =
         (hour['windDirectionDegrees'] as num? ?? 0.0).toDouble();
+    final double humidity =
+        (hour['humidity'] as num? ?? 0.0).toDouble(); // Estrazione umidità
 
-    Widget buildDataRow(Widget child) {
-      return SizedBox(height: dataGridRowHeight, child: Center(child: child));
-    }
+    Widget buildDataRow(Widget child) =>
+        SizedBox(height: dataGridRowHeight, child: Center(child: child));
 
     Widget buildWindWidget() {
-      // Uso della nuova logica _getWindColor per l'icona e il testo
       final windColor = _getWindColor(windSpeed);
       return Row(mainAxisSize: MainAxisSize.min, children: [
         Transform.rotate(
@@ -402,111 +393,84 @@ class _HourlyForecastState extends State<HourlyForecast>
     );
 
     final List<Widget> dataRows = [
-      // Wind Speed + Direction (INVARIATO)
       buildDataRow(buildWindWidget()),
-      // Pressure (APPLICATO RichText)
+      buildDataRow(RichText(
+          text: TextSpan(children: [
+        TextSpan(
+            text: (hour['pressure'] as num?)?.round().toString() ?? 'N/A',
+            style: secondaryDataStyle.copyWith(fontSize: 13)),
+        TextSpan(
+            text: ' hPa',
+            style: secondaryDataStyle.copyWith(
+                fontSize: 11, color: Colors.white38))
+      ]))),
+
+      // [LA SOLUZIONE È QUI] Applichiamo la nuova funzione allo stile del testo
       buildDataRow(RichText(
         text: TextSpan(
+          style:
+              secondaryDataStyle.copyWith(color: _getHumidityColor(humidity)),
           children: [
-            TextSpan(
-                text: (hour['pressure'] as num?)?.round().toString() ?? 'N/A',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 13)), // AUMENTATO font size a 13
-            TextSpan(
-                text: ' hPa',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 11, color: Colors.white38)),
-          ],
-        ),
-      )),
-      // Humidity (APPLICATO RichText per effetto premium)
-      buildDataRow(RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-                text: hour['humidity']?.toString() ?? 'N/A',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 13)), // AUMENTATO font size a 13
+            TextSpan(text: humidity.round().toString()),
             TextSpan(
                 text: '%',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 11, color: Colors.white38)),
-          ],
-        ),
-      )),
-      // Precipitation Probability (APPLICATO RichText per effetto premium e coerenza)
-      buildDataRow(RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-                text: (hour['precipitationProbability'] as num?)
-                        ?.round()
-                        .toString() ??
-                    'N/A',
-                style: primaryDataStyle.copyWith(fontSize: 13)),
-            TextSpan(
-                text: '%',
-                style: primaryDataStyle.copyWith(
+                style: TextStyle(
                     fontSize: 11,
-                    color: primaryDataStyle.color!.withOpacity(0.7))),
+                    color: _getHumidityColor(humidity).withOpacity(0.7))),
           ],
         ),
       )),
-      // Precipitation (USA DataPill, GIA' CORRETTO)
-      buildDataRow(
-        DataPill(
+
+      buildDataRow(RichText(
+          text: TextSpan(children: [
+        TextSpan(
+            text: precipProbability.round().toString(),
+            style: primaryDataStyle.copyWith(
+                color: precipitation > 0.09
+                    ? _getPrecipitationProbabilityColor(precipProbability)
+                    : primaryDataStyle.color)),
+        TextSpan(
+            text: '%',
+            style: primaryDataStyle.copyWith(
+                fontSize: 11,
+                color: (precipitation > 0.09
+                        ? _getPrecipitationProbabilityColor(precipProbability)
+                        : primaryDataStyle.color)!
+                    .withOpacity(0.7)))
+      ]))),
+      buildDataRow(DataPill(
           value: precipitation.toStringAsFixed(1),
           unit: "mm",
-          backgroundColor: _getPrecipitationColor(precipitation),
-        ),
-      ),
-      // Wave Height (USA DataPill, GIA' CORRETTO)
-      buildDataRow(
-        DataPill(
+          backgroundColor: _getNewPrecipitationColor(precipitation))),
+      buildDataRow(DataPill(
           value: waveHeight.toStringAsFixed(1),
           unit: "m",
-          backgroundColor: _getWaveColor(waveHeight),
-        ),
-      ),
-      // Water Temperature (APPLICATO RichText per effetto premium)
+          backgroundColor: _getNewWaveColor(waveHeight))),
       buildDataRow(RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-                text: (hour['waterTemperature'] as num?)?.round().toString() ??
-                    'N/A',
-                style: primaryDataStyle),
-            TextSpan(
-                text: '°',
-                style: primaryDataStyle.copyWith(
-                    fontSize: 11,
-                    color: primaryDataStyle.color!.withOpacity(0.7))),
-          ],
-        ),
-      )),
-      // Current Speed (APPLICATO RichText)
+          text: TextSpan(children: [
+        TextSpan(
+            text:
+                (hour['waterTemperature'] as num?)?.round().toString() ?? 'N/A',
+            style: primaryDataStyle),
+        TextSpan(
+            text: '°',
+            style: primaryDataStyle.copyWith(
+                fontSize: 11, color: primaryDataStyle.color!.withOpacity(0.7)))
+      ]))),
       buildDataRow(RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-                text: hour['currentSpeedKn']?.toString() ?? 'N/A',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 13)), // AUMENTATO font size a 13
-            TextSpan(
-                text: ' kn',
-                style: secondaryDataStyle.copyWith(
-                    fontSize: 11, color: Colors.white38)),
-          ],
-        ),
-      )),
-      // Tide (INVARIATO)
-      buildDataRow(
-        FittedBox(
+          text: TextSpan(children: [
+        TextSpan(
+            text: hour['currentSpeedKn']?.toString() ?? 'N/A',
+            style: secondaryDataStyle.copyWith(fontSize: 13)),
+        TextSpan(
+            text: ' kn',
+            style: secondaryDataStyle.copyWith(
+                fontSize: 11, color: Colors.white38))
+      ]))),
+      buildDataRow(FittedBox(
           fit: BoxFit.scaleDown,
           child: Text((hour['tide'] as String?)?.split(' ')[0] ?? '',
-              style: primaryDataStyle.copyWith(fontSize: 10)),
-        ),
-      ),
+              style: primaryDataStyle.copyWith(fontSize: 10)))),
     ];
 
     return Container(
@@ -529,11 +493,8 @@ class _HourlyForecastState extends State<HourlyForecast>
                     position: index,
                     duration: const Duration(milliseconds: 250),
                     child: SlideAnimation(
-                      verticalOffset: 20.0,
-                      child: FadeInAnimation(
-                        child: dataRows[index],
-                      ),
-                    ),
+                        verticalOffset: 20.0,
+                        child: FadeInAnimation(child: dataRows[index])),
                   );
                 }),
               ),
