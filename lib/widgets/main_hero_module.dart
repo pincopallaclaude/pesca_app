@@ -1,22 +1,92 @@
-// /lib/widgets/main_hero_modul// /lib/widgets/main_hero_module.dart
+// lib/widgets/main_hero_module.dart
 
 import 'package:flutter/material.dart';
+import 'package:weather_icons/weather_icons.dart';
 import '../models/forecast_data.dart';
 import '../utils/weather_icon_mapper.dart';
-import '../widgets/fishing_score_indicator.dart';
-import '../widgets/glassmorphism_card.dart';
-import '../widgets/score_chart_dialog.dart';
-import '../widgets/score_details_dialog.dart';
-import 'package:weather_icons/weather_icons.dart';
+import 'fishing_score_indicator.dart';
+import 'glassmorphism_card.dart';
+import 'score_chart_dialog.dart';
+import 'score_details_dialog.dart';
 
+// Internal widget for the pulsing icon. This remains as our final refined version.
+class _PulsingIcon extends StatefulWidget {
+  final VoidCallback onTap;
+  const _PulsingIcon({required this.onTap});
+
+  @override
+  State<_PulsingIcon> createState() => _PulsingIconState();
+}
+
+class _PulsingIconState extends State<_PulsingIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacityAnimation;
+  bool _isVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _opacityAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) {
+        setState(() => _isVisible = true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _isVisible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOut,
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(50),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: FadeTransition(
+            opacity: _opacityAnimation,
+            child: Icon(
+              Icons.auto_awesome,
+              color: Colors.white.withOpacity(0.85),
+              size: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// [FINAL VERSION] Correctly defined as StatelessWidget.
+// State management is now correctly handled by the parent screen.
 class MainHeroModule extends StatelessWidget {
   final ForecastData data;
   final bool isSunlightModeActive;
+  final VoidCallback
+      onAnalysisTap; // [CORRECT] The callback parameter is correctly defined here.
 
   const MainHeroModule({
+    super.key,
     required this.data,
     required this.isSunlightModeActive,
-    super.key,
+    required this.onAnalysisTap, // And it's required in the constructor.
   });
 
   @override
@@ -24,22 +94,20 @@ class MainHeroModule extends StatelessWidget {
     final List<Shadow> sunlightTextShadows = [
       const Shadow(blurRadius: 8, color: Colors.black87, offset: Offset(0, 2)),
     ];
-
     final largeTextStyle = TextStyle(
-      fontSize: 92,
-      fontWeight: FontWeight.w200,
-      height: 1.1,
-      shadows: isSunlightModeActive ? sunlightTextShadows : null,
-    );
+        fontSize: 92,
+        fontWeight: FontWeight.w200,
+        height: 1.1,
+        shadows: isSunlightModeActive ? sunlightTextShadows : null);
     final mediumTextStyle = TextStyle(
-      fontSize: 16,
-      color: Colors.white70,
-      fontWeight: FontWeight.w500,
-      shadows: isSunlightModeActive ? sunlightTextShadows : null,
-    );
+        fontSize: 16,
+        color: Colors.white70,
+        fontWeight: FontWeight.w500,
+        shadows: isSunlightModeActive ? sunlightTextShadows : null);
 
     return GlassmorphismCard(
       child: Column(children: [
+        // All the existing UI content remains the same
         Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -50,33 +118,27 @@ class MainHeroModule extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      data.giornoNome.toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5),
-                    ),
+                    Text(data.giornoNome.toUpperCase(),
+                        style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5)),
                     const SizedBox(height: 2),
-                    Text(
-                      data.giornoData,
-                      style:
-                          const TextStyle(fontSize: 15, color: Colors.white70),
-                    )
+                    Text(data.giornoData,
+                        style: const TextStyle(
+                            fontSize: 15, color: Colors.white70)),
                   ],
                 ),
               ),
               BoxedIcon(
                 getWeatherIcon(
-                  data.currentHourData['weatherCode'] as String? ?? '0',
-                  isDay: data.currentHourData['isDay'] as bool? ?? false,
-                ),
+                    data.currentHourData['weatherCode'] as String? ?? '0',
+                    isDay: data.currentHourData['isDay'] as bool? ?? false),
                 size: 42,
                 color: getWeatherIconColor(
-                  data.currentHourData['weatherCode'] as String? ?? '0',
-                  isDay: data.currentHourData['isDay'] as bool? ?? true,
-                ),
+                    data.currentHourData['weatherCode'] as String? ?? '0',
+                    isDay: data.currentHourData['isDay'] as bool? ?? true),
               ),
             ]),
         const SizedBox(height: 8),
@@ -110,44 +172,48 @@ class MainHeroModule extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPress: () => showScoreDetailsDialog(context, data),
-          child: FishingScoreIndicator(score: data.pescaScoreNumeric),
+        SizedBox(
+          width: 200,
+          height: 40,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPress: () => showScoreDetailsDialog(context, data),
+                child: FishingScoreIndicator(score: data.pescaScoreNumeric),
+              ),
+              Positioned(
+                top: -5,
+                right: -5,
+                child: _PulsingIcon(onTap: onAnalysisTap),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildWindowItem("MATTINO", data.finestraMattino, context, data),
-            Container(
-                height: 30, width: 1, color: Colors.white.withOpacity(0.2)),
-            _buildWindowItem("SERA", data.finestraSera, context, data),
-          ],
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          _buildWindowItem("MATTINO", data.finestraMattino, context, data),
+          Container(height: 30, width: 1, color: Colors.white.withOpacity(0.2)),
+          _buildWindowItem("SERA", data.finestraSera, context, data),
+        ]),
         const Divider(color: Colors.white24, height: 32),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildInfoItem('Vento', data.ventoDati),
-            _buildInfoItem('Mare', data.mare),
-            _buildInfoItem('Umidità', data.umidita),
-          ],
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+          _buildInfoItem('Vento', data.ventoDati),
+          _buildInfoItem('Mare', data.mare),
+          _buildInfoItem('Umidità', data.umidita),
+        ]),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildInfoItem('Pressione', data.pressione),
-            _buildInfoItem('Alta Marea', data.altaMarea),
-            _buildInfoItem('Bassa Marea', data.bassaMarea),
-          ],
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+          _buildInfoItem('Pressione', data.pressione),
+          _buildInfoItem('Alta Marea', data.altaMarea),
+          _buildInfoItem('Bassa Marea', data.bassaMarea),
+        ]),
       ]),
     );
   }
 
-  // [RIPRISTINATO] Metodi helper che avevo omesso per errore.
   Widget _buildInfoItem(String label, String value) => Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,

@@ -276,20 +276,12 @@ class _ScoreChartDialogState extends State<ScoreChartDialog> {
 
     Widget content = Column(
       key: key, // Usa la chiave qui per l'AnimatedSwitcher esterno
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(children: [
-          Text('Ora $time • ',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
-          Text('Punteggio: ${score.toStringAsFixed(1)}',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
-        ]),
+        Text(
+          'Ora $time • Punteggio: ${score.toStringAsFixed(1)}',
+          style: const TextStyle(fontSize: 14, color: Colors.white70),
+        ),
         const Divider(color: Colors.white24, height: 24),
         if (reasons.isNotEmpty)
           Column(

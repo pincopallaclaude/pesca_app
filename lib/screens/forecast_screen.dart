@@ -1,22 +1,21 @@
 // lib/screens/forecast_screen.dart
 
+import 'dart:async';
 import 'dart:ui';
-import 'dart:async'; // Added for StreamSubscription
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:light/light.dart';
 import 'package:intl/intl.dart';
-import 'package:palette_generator/palette_generator.dart';
-import 'package:light/light.dart'; // [THE FIX] Added the missing import
 
 import '../models/forecast_data.dart';
 import '../services/api_service.dart';
-import '../widgets/main_hero_module.dart';
+import '../widgets/analyst_card.dart';
 import '../widgets/glassmorphism_card.dart';
 import '../widgets/hourly_forecast.dart';
-import '../widgets/weekly_forecast.dart';
-import '../widgets/search_overlay.dart';
 import '../widgets/location_services_dialog.dart';
+import '../widgets/main_hero_module.dart';
+import '../widgets/search_overlay.dart';
 import '../widgets/stale_data_dialog.dart';
+import '../widgets/weekly_forecast.dart';
 
 class ForecastScreen extends StatefulWidget {
   const ForecastScreen({super.key});
@@ -34,12 +33,17 @@ class _ForecastScreenState extends State<ForecastScreen> {
   int _currentPageIndex = 0;
   bool _isHourlyForecastExpanded = false;
 
-  double _contrastOpacity = 0.3;
-  final Map<String, double> _luminanceCache = {};
-
   StreamSubscription<int>? _lightSubscription;
   bool _isSunlightModeActive = false;
   static const int _sunlightThresholdLux = 7000;
+
+  bool _isAnalysisVisible = false;
+
+  void _toggleAnalysis() {
+    setState(() {
+      _isAnalysisVisible = !_isAnalysisVisible;
+    });
+  }
 
   @override
   void initState() {
@@ -50,12 +54,12 @@ class _ForecastScreenState extends State<ForecastScreen> {
     _pageController.addListener(() {
       final newPageIndex = _pageController.page?.round();
       if (newPageIndex != null && newPageIndex != _currentPageIndex) {
-        if (!mounted) return;
-        setState(() {
-          _currentPageIndex = newPageIndex;
-          _isHourlyForecastExpanded = false;
-        });
-        _updateContrastOpacityForPage(newPageIndex);
+        if (mounted) {
+          setState(() {
+            _currentPageIndex = newPageIndex;
+            _isHourlyForecastExpanded = false;
+          });
+        }
       }
     });
   }
@@ -65,46 +69,19 @@ class _ForecastScreenState extends State<ForecastScreen> {
       _lightSubscription = Light().lightSensorStream.listen((luxValue) {
         final isBright = luxValue > _sunlightThresholdLux;
         if (isBright != _isSunlightModeActive) {
-          if (!mounted) return;
-          setState(() {
-            _isSunlightModeActive = isBright;
-          });
+          if (mounted) {
+            setState(() {
+              _isSunlightModeActive = isBright;
+            });
+          }
         }
       }, onError: (error) {
-        print("[Sunlight Mode] Errore stream sensore: $error");
-        _lightSubscription?.cancel(); // Cancella in caso di errore
+        print("[Sunlight Mode] Sensor stream error: $error");
+        _lightSubscription?.cancel();
       });
     } catch (e) {
-      print(
-          "[Sunlight Mode] Impossibile avviare sensore (probabilmente non disponibile): $e");
+      print("[Sunlight Mode] Could not start sensor (likely unavailable): $e");
     }
-  }
-
-  Future<void> _updateContrastOpacityForPage(int pageIndex) async {
-    final forecasts = await _forecastFuture;
-    if (forecasts == null || forecasts.isEmpty || pageIndex >= forecasts.length)
-      return;
-    final imagePath = forecasts[pageIndex].backgroundImagePath;
-    if (_luminanceCache.containsKey(imagePath)) {
-      if (!mounted) return;
-      setState(() {
-        _contrastOpacity = _luminanceCache[imagePath]!;
-      });
-      return;
-    }
-    final PaletteGenerator palette = await PaletteGenerator.fromImageProvider(
-      AssetImage(imagePath),
-      size: const Size(100, 100),
-      maximumColorCount: 5,
-    );
-    final Color dominantColor = palette.dominantColor?.color ?? Colors.black;
-    final double luminance = dominantColor.computeLuminance();
-    final double newOpacity = (0.2 + (0.4 * luminance)).clamp(0.2, 0.6);
-    _luminanceCache[imagePath] = newOpacity;
-    if (!mounted) return;
-    setState(() {
-      _contrastOpacity = newOpacity;
-    });
   }
 
   @override
@@ -115,7 +92,6 @@ class _ForecastScreenState extends State<ForecastScreen> {
     super.dispose();
   }
 
-  // All other _ForecastScreenState functions are unchanged
   void _loadForecast(String location, String name) {
     if (!mounted) return;
     setState(() {
@@ -130,12 +106,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
               });
             } else {
               setState(() {
-                _forecastFuture = Future.error(Exception('Update rejected.'));
+                _forecastFuture =
+                    Future.error(Exception('Update rejected by user.'));
               });
             }
           });
         }
-        throw e; // Re-throw the exception if it's not of the handled type
+        throw e;
       });
     });
   }
@@ -143,9 +120,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
   void _onGpsSearch() async {
     _removeSearchOverlay();
     if (!mounted) return;
-    setState(() {
-      _isLoadingGps = true;
-    });
+    setState(() => _isLoadingGps = true);
     try {
       final locationData = await _apiService.getCurrentGpsLocation();
       final coords = locationData['coords']!;
@@ -162,9 +137,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
       ));
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoadingGps = false;
-        });
+        setState(() => _isLoadingGps = false);
       }
     }
   }
@@ -201,7 +174,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoadingGps // Added _isLoadingGps check here
+      body: _isLoadingGps
           ? Container(
               color: Colors.black,
               child: const Center(
@@ -231,76 +204,134 @@ class _ForecastScreenState extends State<ForecastScreen> {
                 }
 
                 final forecasts = snapshot.data!;
-                if (_luminanceCache.isEmpty && forecasts.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _updateContrastOpacityForPage(0));
-                }
                 final backgroundPath =
                     forecasts[_currentPageIndex].backgroundImagePath;
 
                 return Stack(
                   fit: StackFit.expand,
+                  alignment: Alignment.center,
                   children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 700),
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(opacity: animation, child: child),
-                      child: Image.asset(backgroundPath,
-                          key: ValueKey(backgroundPath),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity),
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 700),
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(opacity: animation, child: child),
+                          child: Image.asset(backgroundPath,
+                              key: ValueKey(backgroundPath),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity),
+                        ),
+                        IgnorePointer(
+                          ignoring: !_isSunlightModeActive,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeInOut,
+                            opacity: _isSunlightModeActive ? 1.0 : 0.0,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: const Alignment(0.0, 0.8),
+                                  colors: [
+                                    Colors.black.withOpacity(0.75),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        PageView.builder(
+                          controller: _pageController,
+                          itemCount: forecasts.length,
+                          onPageChanged: (index) {
+                            if (mounted) {
+                              setState(() {
+                                _currentPageIndex = index;
+                                _isHourlyForecastExpanded = false;
+                              });
+                            }
+                          },
+                          itemBuilder: (context, index) {
+                            final String todayFormatted =
+                                DateFormat('dd/MM').format(DateTime.now());
+                            final bool isActuallyToday =
+                                forecasts[index].giornoData == todayFormatted;
+                            final List<ForecastData> weeklyDisplayData =
+                                (index + 1 < forecasts.length)
+                                    ? forecasts.skip(index + 1).toList()
+                                    : [];
+
+                            return ForecastPage(
+                              currentDayData: forecasts[index],
+                              allForecasts: forecasts,
+                              weeklyForecastForDisplay: weeklyDisplayData,
+                              locationName: _currentLocationName,
+                              onSearchTap: _toggleSearchPanel,
+                              isHourlyExpanded: _isHourlyForecastExpanded,
+                              onHourlyExpansionChanged: (isExpanded) {
+                                if (mounted)
+                                  setState(() {
+                                    _isHourlyForecastExpanded = isExpanded;
+                                  });
+                              },
+                              isToday: isActuallyToday,
+                              isSunlightModeActive: _isSunlightModeActive,
+                              onAnalysisTap: _toggleAnalysis,
+                            );
+                          },
+                        )
+                      ],
                     ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 500),
-                      curve: Curves.ease,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.black.withOpacity(_isSunlightModeActive
-                                ? 0.75
-                                : _contrastOpacity),
-                            Colors.black.withOpacity(_isSunlightModeActive
-                                ? 0.4
-                                : _contrastOpacity * 0.5),
-                            Colors.transparent,
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: const [0.0, 0.5, 1.0],
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      child: _isAnalysisVisible
+                          ? BackdropFilter(
+                              key: const ValueKey('blur'),
+                              filter:
+                                  ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                              child: Container(
+                                  color: Colors.black.withOpacity(0.2)),
+                            )
+                          : const SizedBox.shrink(key: ValueKey('no-blur')),
+                    ),
+                    if (_isAnalysisVisible)
+                      GestureDetector(
+                        onTap: _toggleAnalysis,
+                        child: AnimatedOpacity(
+                          opacity: 1.0,
+                          duration: const Duration(milliseconds: 400),
+                          child: Container(color: Colors.transparent),
                         ),
                       ),
-                    ),
-                    PageView.builder(
-                      controller: _pageController,
-                      itemCount: forecasts.length,
-                      itemBuilder: (context, index) {
-                        final String todayFormatted =
-                            DateFormat('dd/MM').format(DateTime.now());
-                        final bool isActuallyToday =
-                            forecasts[index].giornoData == todayFormatted;
-                        final List<ForecastData> weeklyDisplayData =
-                            (index + 1 < forecasts.length)
-                                ? forecasts.skip(index + 1).toList()
-                                : [];
-
-                        return ForecastPage(
-                          currentDayData: forecasts[index],
-                          allForecasts: forecasts,
-                          weeklyForecastForDisplay: weeklyDisplayData,
-                          locationName: _currentLocationName,
-                          onSearchTap: _toggleSearchPanel,
-                          isHourlyExpanded: _isHourlyForecastExpanded,
-                          onHourlyExpansionChanged: (isExpanded) {
-                            setState(() {
-                              _isHourlyForecastExpanded = isExpanded;
-                            });
-                          },
-                          isToday: isActuallyToday,
-                          isSunlightModeActive: _isSunlightModeActive,
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: Tween<double>(begin: 0.9, end: 1.0)
+                                .animate(animation),
+                            child: child,
+                          ),
                         );
                       },
-                    )
+                      child: _isAnalysisVisible
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 24.0),
+                              child: AnalystCard(
+                                key: const ValueKey("analysis_card"),
+                                lat: 40.7957,
+                                lon: 14.1889,
+                                onClose: _toggleAnalysis,
+                              ),
+                            )
+                          : const SizedBox.shrink(key: ValueKey("empty_card")),
+                    ),
                   ],
                 );
               },
@@ -318,7 +349,8 @@ class ForecastPage extends StatefulWidget {
   final Function(bool) onHourlyExpansionChanged;
   final bool isToday;
   final List<ForecastData> weeklyForecastForDisplay;
-  final bool isSunlightModeActive; // Added the new parameter
+  final bool isSunlightModeActive;
+  final VoidCallback onAnalysisTap;
 
   const ForecastPage({
     super.key,
@@ -330,7 +362,8 @@ class ForecastPage extends StatefulWidget {
     required this.onHourlyExpansionChanged,
     required this.isToday,
     required this.weeklyForecastForDisplay,
-    required this.isSunlightModeActive, // Added to the constructor
+    required this.isSunlightModeActive,
+    required this.onAnalysisTap,
   });
 
   @override
@@ -340,7 +373,6 @@ class ForecastPage extends StatefulWidget {
 class _ForecastPageState extends State<ForecastPage> {
   final ScrollController _scrollController = ScrollController();
   double _appBarOpacity = 0.0;
-  // List of shadows to apply when Sunlight Mode is active
   final List<Shadow> _sunlightTextShadows = [
     const Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
   ];
@@ -351,10 +383,11 @@ class _ForecastPageState extends State<ForecastPage> {
     _scrollController.addListener(() {
       final newOpacity = (_scrollController.offset / 80).clamp(0.0, 1.0);
       if (newOpacity != _appBarOpacity) {
-        if (!mounted) return;
-        setState(() {
-          _appBarOpacity = newOpacity;
-        });
+        if (mounted) {
+          setState(() {
+            _appBarOpacity = newOpacity;
+          });
+        }
       }
     });
   }
@@ -384,7 +417,6 @@ class _ForecastPageState extends State<ForecastPage> {
           pinned: true,
           centerTitle: true,
           leading: IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
-          // Apply conditional shadow to the AppBar title
           title: Text(widget.locationName,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
@@ -406,10 +438,11 @@ class _ForecastPageState extends State<ForecastPage> {
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              // Pass the boolean to MainHeroModule as well
               MainHeroModule(
-                  data: widget.currentDayData,
-                  isSunlightModeActive: widget.isSunlightModeActive),
+                data: widget.currentDayData,
+                isSunlightModeActive: widget.isSunlightModeActive,
+                onAnalysisTap: widget.onAnalysisTap,
+              ),
               const SizedBox(height: 20),
               GlassmorphismCard(
                 title: "PREVISIONI NELLE PROSSIME ORE",

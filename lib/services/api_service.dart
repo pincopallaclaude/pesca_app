@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'dart:async'; // Import for TimeoutException
 
 class NetworkErrorWithStaleDataException implements Exception {
   final String staleJsonData;
@@ -14,10 +15,19 @@ class NetworkErrorWithStaleDataException implements Exception {
 }
 
 class LocationServicesDisabledException implements Exception {
-  final String message = 'I servizi di localizzazione sono disabilitati.';
+  final String message = 'Location services are disabled.';
   const LocationServicesDisabledException();
   @override
   String toString() => message;
+}
+
+/// Custom exception for API-related errors.
+class ApiException implements Exception {
+  final String message;
+  const ApiException(this.message);
+
+  @override
+  String toString() => 'ApiException: $message';
 }
 
 class ApiService {
@@ -27,11 +37,11 @@ class ApiService {
   Future<List<ForecastData>> fetchForecastData(String location) async {
     final prefs = await SharedPreferences.getInstance();
     //const cacheVersion =
-    //    '_v2.3'; // Incrementa la versione per invalidare la cache vecchia
+    //    '_v2.3'; // Increment the version to invalidate old cache
     final String randomCacheBuster =
         DateTime.now().millisecondsSinceEpoch.toString();
     final cacheVersion = '_debug_${randomCacheBuster}';
-    print('[ApiService Log] CACHE BUSTER ATTIVO: $cacheVersion');
+    print('[ApiService Log] CACHE BUSTER ACTIVE: $cacheVersion');
     final cacheKey = 'forecast_$location$cacheVersion';
     final cacheTimestampKey = 'timestamp_$location$cacheVersion';
     final cachedData = prefs.getString(cacheKey);
@@ -40,58 +50,64 @@ class ApiService {
     if (cachedData != null && cachedTimestamp != null) {
       final lastUpdate = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
       if (DateTime.now().difference(lastUpdate) < _cacheTTL) {
-        print("CACHE HIT: Dati freschi trovati per $location");
+        print("CACHE HIT: Fresh data found for $location");
         try {
           return parseForecastData(cachedData);
         } catch (e) {
-          print("CACHE CORROTTA! Cancello e procedo. Errore: $e");
+          print("CORRUPTED CACHE! Deleting and proceeding. Error: $e");
           await prefs.remove(cacheKey);
           await prefs.remove(cacheTimestampKey);
         }
       }
     }
 
-    print("CACHE MISS: Chiamata di rete per $location");
+    print("CACHE MISS: Network call for $location");
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/forecast?location=$location'))
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
-        print('[ApiService DEBUG] JSON grezzo ricevuto dal backend:');
+        print('[ApiService DEBUG] Raw JSON received from backend:');
         print(response.body);
 
         try {
           final data = parseForecastData(response.body);
-          // Salva in cache solo se il parsing ha avuto successo
+          // Save to cache only if parsing was successful
           await prefs.setString(cacheKey, response.body);
           await prefs.setInt(
               cacheTimestampKey, DateTime.now().millisecondsSinceEpoch);
           return data;
         } catch (e) {
-          print(
-              "ERRORE DI PARSING DEL JSON NUOVO: $e. Il backend ha inviato dati corrotti.");
+          print("ERROR PARSING NEW JSON: $e. Backend sent corrupted data.");
           if (cachedData != null) {
-            print("Uso i dati obsoleti in cache come fallback.");
-            return parseForecastData(
-                cachedData); // Riprova a parsare i dati vecchi
+            print("Using stale cached data as fallback.");
+            return parseForecastData(cachedData); // Retry parsing old data
           }
           throw Exception(
-              "I dati ricevuti dal server sono invalidi e non ci sono dati in cache.");
+              "Data received from server is invalid and no cached data available.");
         }
       } else {
-        throw Exception('Codice errore server: ${response.statusCode}');
+        throw Exception('Server error code: ${response.statusCode}');
       }
-    } catch (e) {
-      if (e is NetworkErrorWithStaleDataException) throw e;
-      print("ERRORE DI RETE: $e");
+    } on TimeoutException catch (e) {
+      // Ensure TimeoutException is caught correctly here
+      print("NETWORK ERROR (Timeout): $e");
       if (cachedData != null) {
         throw NetworkErrorWithStaleDataException(cachedData);
       }
-      throw Exception('Errore di rete e nessun dato in cache disponibile.');
+      throw Exception('Network error (timeout) and no cached data available.');
+    } catch (e) {
+      if (e is NetworkErrorWithStaleDataException) throw e;
+      print("NETWORK ERROR: $e");
+      if (cachedData != null) {
+        throw NetworkErrorWithStaleDataException(cachedData);
+      }
+      throw Exception(
+          'Network error or server unavailable and no cached data available.');
     }
   }
 
-  // Il metodo è PUBBLICO per essere chiamato da ForecastScreen
+  // The method is PUBLIC to be called by ForecastScreen
   List<ForecastData> parseForecastData(String jsonBody) {
     try {
       final decoded = json.decode(jsonBody);
@@ -101,7 +117,7 @@ class ApiService {
         final dayMap = dayJson as Map<String, dynamic>;
         final mappedIcon = _mapWeatherIcon(dayMap['meteoIcon'] ?? '');
         return {
-          'day': dayMap['giornoNome'] ?? 'N/D',
+          'day': dayMap['giornoNome'] ?? 'N/A',
           'icon': mappedIcon['icon'],
           'icon_color': mappedIcon['icon_color'],
           'min': (dayMap['temperaturaMin'] as num?)?.round() ?? 0,
@@ -114,9 +130,9 @@ class ApiService {
               dailyJson as Map<String, dynamic>, weeklyData))
           .toList();
     } catch (e) {
-      print("[FATAL PARSE ERROR] Impossibile parsare il JSON: $e");
-      // Se il JSON è veramente incorreggibile, restituiamo una lista vuota per evitare il loop.
-      // La UI mostrerà "Nessun dato".
+      print("[FATAL PARSE ERROR] Unable to parse JSON: $e");
+      // If the JSON is truly uncorrectable, return an empty list to avoid the loop.
+      // The UI will show "No data".
       return [];
     }
   }
@@ -159,12 +175,12 @@ class ApiService {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception('Il permesso di localizzazione è stato negato.');
+        throw Exception('Location permission denied.');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Permessi negati permanentemente.');
+      throw Exception('Permissions permanently denied.');
     }
 
     Position position = await Geolocator.getCurrentPosition();
@@ -176,17 +192,49 @@ class ApiService {
           await http.get(reverseUrl).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
-        final locationName =
-            decoded['name'] as String? ?? 'Posizione Sconosciuta';
+        final locationName = decoded['name'] as String? ?? 'Unknown Location';
         return {
           'coords': "${position.latitude},${position.longitude}",
           'name': locationName.split(',')[0],
         };
       } else {
-        throw Exception('Servizio di localizzazione non disponibile.');
+        throw Exception('Location service not available.');
       }
     } catch (e) {
-      throw Exception('Errore di rete nella ricerca della località.');
+      throw Exception('Network error searching for location.');
+    }
+  }
+
+  /// Fetches the AI-generated analysis for the day.
+  /// Throws [ApiException] on server errors or timeout.
+  Future<String> getAnalysis(double lat, double lon) async {
+    // Note: lat/lon are not used by the POC backend, but are included for future-proofing.
+    final uri = Uri.parse('$_baseUrl/analyze-day'); // Corrected path
+    print('[ApiService Log] Calling: $uri');
+
+    try {
+      final response = await http.post(uri).timeout(
+            // The timeout must be longer than the simulated delay in the backend
+            const Duration(seconds: 15),
+            onTimeout: () =>
+                throw TimeoutException('API timeout for analysis after 15s'),
+          );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        print('[ApiService Log] Analysis received successfully');
+        return data['analysis'] as String? ?? 'No analysis available.';
+      } else {
+        print(
+            '[ApiService Log] HTTP error for analysis: ${response.statusCode}');
+        throw ApiException('Server error: ${response.statusCode}');
+      }
+    } on TimeoutException catch (e) {
+      print('[ApiService Log] Analysis timeout: $e');
+      throw ApiException('Timeout during analysis request.');
+    } catch (e) {
+      print('[ApiService Log] Generic analysis ERROR: $e');
+      throw ApiException('Unexpected error during analysis.');
     }
   }
 }

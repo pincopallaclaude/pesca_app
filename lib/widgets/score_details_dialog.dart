@@ -111,7 +111,11 @@ class ScoreDetailsDialog extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: Colors.white70),
             ),
-            const SizedBox(height: 20),
+
+            const Padding(
+              padding: EdgeInsets.only(top: 12.0, bottom: 8.0),
+              child: Divider(color: Colors.white24, height: 1),
+            ),
 
             // Logica per mostrare i dati o un messaggio di fallback
             if (reasons.isNotEmpty)
