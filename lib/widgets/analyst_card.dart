@@ -1,36 +1,89 @@
 // lib/widgets/analyst_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:animated_text_kit/animated_text_kit.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:markdown/markdown.dart' as md;
 import '../services/api_service.dart';
 import 'glassmorphism_card.dart';
 
-// Enum remains unchanged
+// -----------------------------------------------------------------------------
+// STILI & BUILDERS
+// -----------------------------------------------------------------------------
+
+final Color baseTextColor = const Color(0xFFEAEAEA);
+final TextStyle baseStyle =
+    GoogleFonts.lora(color: baseTextColor, fontSize: 16, height: 1.6);
+final TextStyle strongStyle = GoogleFonts.lato(
+    fontWeight: FontWeight.w900, color: const Color(0xFFFFC107)); // Amber
+final TextStyle warningStyle = GoogleFonts.lato(
+    fontWeight: FontWeight.w900, color: const Color(0xFFEF6C00)); // Deep Coral
+final TextStyle h3Style = GoogleFonts.lato(
+    color: Colors.white,
+    fontSize: 20,
+    fontWeight: FontWeight.bold,
+    height: 1.4);
+
+// Implementazione custom per la Linea Orizzontale (HR) - UNICO BUILDER MANTENUTO
+class HorizontalRuleBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    return const Divider(color: Colors.white38, height: 32, thickness: 1);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// ANALYST CARD (WIDGET PRINCIPALE)
+// -----------------------------------------------------------------------------
+
 enum AnalysisState { loading, success, error }
 
 class AnalystCard extends StatefulWidget {
   final double lat;
   final double lon;
-  final VoidCallback onClose; // Required parameter
+  final VoidCallback onClose;
 
   const AnalystCard({
     super.key,
     required this.lat,
     required this.lon,
-    required this.onClose, // Required parameter
+    required this.onClose,
   });
 
   @override
   State<AnalystCard> createState() => _AnalystCardState();
 }
 
-// --- NUVO CODICE DA INCOLLARE (IN SOSTITUZIONE DELL'INTERA CLASSE '_AnalystCardState') ---
 class _AnalystCardState extends State<AnalystCard> {
   final ApiService _apiService = ApiService();
   AnalysisState _currentState = AnalysisState.loading;
   String? _analysisText;
   String _errorText = '';
+
+  // Mappa dei builder contenente solo 'hr' (risolto errore _inlines.isEmpty)
+  late final Map<String, MarkdownElementBuilder> _builders = {
+    'hr': HorizontalRuleBuilder(),
+  };
+
+  // Definisce lo style sheet: rimossi parametri obsoleti (risolto errore 'li'/'marginBottom')
+  late final MarkdownStyleSheet _styleSheet =
+      MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+    h3: h3Style,
+    strong: strongStyle,
+    em: baseStyle.copyWith(fontStyle: FontStyle.italic),
+    del: warningStyle.copyWith(decoration: TextDecoration.none),
+
+    // Stile base per il paragrafo
+    p: baseStyle.copyWith(height: 1.6),
+
+    // Stile per il list item
+    listIndent: 20,
+    listBullet: strongStyle, // Stile standard per il bullet (Amber)
+    listBulletPadding: const EdgeInsets.only(right: 8.0, top: 4.0),
+
+    horizontalRuleDecoration: const BoxDecoration(),
+  );
 
   @override
   void initState() {
@@ -39,13 +92,19 @@ class _AnalystCardState extends State<AnalystCard> {
   }
 
   Future<void> _fetchAnalysis() async {
-    // unchanged
     if (!mounted) return;
     setState(() {
       _currentState = AnalysisState.loading;
     });
+
+    const String placeholderLocation = 'Current Location';
+    const String placeholderQuery =
+        'What are the best fishing conditions for today?';
+
     try {
-      final result = await _apiService.getAnalysis(widget.lat, widget.lon);
+      final result = await _apiService.fetchAnalysis(
+          placeholderLocation, placeholderQuery);
+
       if (!mounted) return;
       setState(() {
         _analysisText = result;
@@ -53,211 +112,170 @@ class _AnalystCardState extends State<AnalystCard> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      print('[AnalystCard Log] API Exception: ${e.message}');
       setState(() {
         _errorText = e.message;
+        _currentState = AnalysisState.error;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      print('[AnalystCard Log] Generic Error: $e');
+      setState(() {
+        _errorText = 'A generic error occurred: $e';
         _currentState = AnalysisState.error;
       });
     }
   }
 
-  /// Helper function to parse the styled text using RichText and RegExp,
-  /// replacing **bold**, *italic*, and ##warning## tags with styled TextSpans.
-  Widget _buildStyledText(String? text) {
-    if (text == null) return const SizedBox.shrink();
+  Widget _buildMarkdownContent() {
+    if (_analysisText == null || _analysisText!.isEmpty) {
+      return const Text('Nessuna analisi disponibile.',
+          style: TextStyle(color: Colors.white70));
+    }
 
-    final List<TextSpan> spans = [];
-    // Regex matches **bold**, *italic*, or ##warning## tags
-    final RegExp aullExp = RegExp(r'(\*\*.*?\*\*|\*.*?\*|##.*?##)');
-
-    text.splitMapJoin(
-      aullExp,
-      onMatch: (Match match) {
-        String matchText = match[0]!;
-        if (matchText.startsWith('**')) {
-          // **Bold** style
-          spans.add(TextSpan(
-            text: matchText.replaceAll('**', ''),
-            style: GoogleFonts.lora(
-                fontWeight: FontWeight.bold,
-                color: Colors.cyan.shade200,
-                fontSize: 16),
-          ));
-        } else if (matchText.startsWith('*')) {
-          // *Italic* style
-          spans.add(TextSpan(
-            text: matchText.replaceAll('*', ''),
-            style: GoogleFonts.lora(
-                fontStyle: FontStyle.italic,
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 16),
-          ));
-        } else if (matchText.startsWith('##')) {
-          // ##Warning## style
-          spans.add(TextSpan(
-            text: matchText.replaceAll('##', ''),
-            style: GoogleFonts.lora(
-                fontWeight: FontWeight.bold,
-                color: Colors.orange.shade300,
-                fontSize: 16),
-          ));
-        }
-        return '';
-      },
-      onNonMatch: (String nonMatch) {
-        // Plain text style
-        spans.add(TextSpan(text: nonMatch));
-        return '';
-      },
-    );
-
-    return RichText(
-      textAlign: TextAlign.justify, // Premium plus: Justified text alignment
-      text: TextSpan(
-        style: GoogleFonts.lora(
-          // Default base style
-          color: Colors.white.withOpacity(0.9),
-          fontSize: 16,
-          height: 1.6,
-        ),
-        children: spans,
+    // Usa DefaultTextStyle per tentare di forzare la giustificazione
+    return DefaultTextStyle.merge(
+      textAlign: TextAlign.justify,
+      child: MarkdownBody(
+        data: _analysisText!,
+        styleSheet: _styleSheet,
+        builders: _builders,
+        shrinkWrap: true,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // The main structure remains the same
     return GlassmorphismCard(
-      child: ClipRRect(
-        borderRadius:
-            BorderRadius.circular(16.0), // Match GlassmorphismCard's radius
-        child: _buildContent(),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: switch (_currentState) {
+            AnalysisState.loading =>
+              _buildLoadingIndicator(key: const ValueKey('loading')),
+            AnalysisState.success =>
+              _buildSuccessCard(key: const ValueKey('success')),
+            AnalysisState.error =>
+              _buildErrorCard(key: const ValueKey('error')),
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildContent() {
-    // The main structure remains the same
-    // Use AnimatedSwitcher for a smooth transition between loading/success/error
-    return AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        child: switch (_currentState) {
-          AnalysisState.loading =>
-            _buildLoadingIndicator(key: const ValueKey('loading')),
-          AnalysisState.success =>
-            _buildSuccessCard(key: const ValueKey('success')),
-          AnalysisState.error => _buildErrorCard(key: const ValueKey('error')),
-        });
-  }
-
   Widget _buildLoadingIndicator({Key? key}) {
-    // unchanged
     return Column(
       key: key,
       mainAxisSize: MainAxisSize.min,
-      children: const [
-        SizedBox(height: 20),
-        CircularProgressIndicator(color: Colors.cyanAccent),
-        SizedBox(height: 16),
-        Text("L'IA sta analizzando i dati...",
-            style: TextStyle(color: Colors.white70)),
-        SizedBox(height: 20),
+      children: [
+        const SizedBox(height: 20),
+        const CircularProgressIndicator(color: Colors.cyanAccent),
+        const SizedBox(height: 16),
+        Text(
+          "L'IA sta analizzando i dati...",
+          style: GoogleFonts.lato(color: Colors.white70, fontSize: 16),
+        ),
+        const SizedBox(height: 20),
       ],
     );
   }
 
   Widget _buildSuccessCard({Key? key}) {
-    return Column(
+    final headerStyle = GoogleFonts.lato(
+      color: const Color(0xFFFFD700).withOpacity(0.9),
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+      letterSpacing: 1.2,
+    );
+
+    return AnimationLimiter(
       key: key,
-      mainAxisSize: MainAxisSize.min, // Essential to respect children's size.
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0,
-              0), // Removed bottom padding to attach divider cleanly
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Icon(Icons.auto_awesome,
-                  color: Color(0xFFFFD700), size: 20),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Insight di Pesca',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+      child: Column(
+        // mainAxisSize.min è essenziale, ma richiede un'altezza definita per il contenuto scrollabile.
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: AnimationConfiguration.toStaggeredList(
+          duration: const Duration(milliseconds: 450),
+          childAnimationBuilder: (widget) => SlideAnimation(
+            verticalOffset: 50.0,
+            child: FadeInAnimation(child: widget),
+          ),
+          children: [
+            // Staggered child 1: Header
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.auto_awesome, color: headerStyle.color, size: 18),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('INSIGHT DI PESCA', style: headerStyle),
+                    Text('RAG-Powered',
+                        style: GoogleFonts.lato(
+                            color: Colors.white54,
+                            fontSize: 10,
+                            letterSpacing: 1.0)),
+                  ],
+                ),
+                const Spacer(),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.onClose,
+                    borderRadius: BorderRadius.circular(50),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Icon(Icons.close, color: Colors.white70, size: 20),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'AI-Powered',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: widget.onClose,
-                  borderRadius: BorderRadius.circular(50),
-                  child: const Padding(
-                    padding: EdgeInsets.all(4.0),
-                    child: Icon(Icons.close, color: Colors.white70, size: 22),
                   ),
                 ),
+              ],
+            ),
+
+            // Staggered child 2: Divider
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10.0),
+              child: Divider(color: Colors.white24, height: 1, thickness: 1),
+            ),
+
+            // Staggered child 3: Main content - CORREZIONE FINALE LAYOUT
+            // ConstrainedBox risolve l'errore Flexible/Expanded forzando un'altezza massima.
+            ConstrainedBox(
+              // Altezza massima del contenuto (adatta questo valore se necessario)
+              constraints: const BoxConstraints(
+                maxHeight: 400.0,
               ),
-            ],
-          ),
+              child: SingleChildScrollView(
+                child: _buildMarkdownContent(),
+              ),
+            ),
+          ],
         ),
-
-        // Divider
-        const Padding(
-          padding: EdgeInsets.symmetric(
-              horizontal: 20.0), // Divider is inset like the text.
-          child: Divider(color: Colors.white24, height: 24),
-        ),
-
-        // Body: Replaced AnimatedTextKit/Markdown with custom RichText parser
-        Padding(
-          // Here we only need horizontal padding, and a smaller bottom one.
-          padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 20.0),
-          child: _buildStyledText(_analysisText),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildErrorCard({Key? key}) {
-    final headerStyle = GoogleFonts.lora(
-      color: Colors.cyanAccent.withOpacity(0.9),
-      fontSize: 14, // Slightly larger to give it more presence
-      fontWeight: FontWeight.w700, // Bolder for a clearer title hierarchy
-      letterSpacing: 0.5,
-    );
-    // unchanged
     return Column(
       key: key,
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Icon(Icons.error_outline,
-                color: Colors.orangeAccent, size: 20),
-            const SizedBox(width: 8),
-            Text('Errore',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            const Spacer(),
+            Row(
+              children: [
+                const Icon(Icons.error_outline,
+                    color: Colors.orangeAccent, size: 20),
+                const SizedBox(width: 8),
+                Text('Errore',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white70, size: 20),
               onPressed: widget.onClose,
