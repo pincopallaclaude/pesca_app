@@ -232,36 +232,57 @@ class ApiService {
   }
 
   /// Fetches the AI-generated analysis for the day using RAG.
-  /// Sends location and userQuery in a POST request body.
+  /// Sends lat, lon, and userQuery in a POST request body.
   /// Throws [ApiException] on server errors or timeout.
   Future<String> fetchAnalysis(String location, String userQuery) async {
+    print('[ApiService DEBUG] INPUT LOCATION: "$location"');
+
+    // 1. Estrai latitudine e longitudine dalla stringa "lat,lon"
+    final coords = location.split(',');
+    if (coords.length != 2) {
+      print(
+          '[ApiService DEBUG] ERROR: Invalid format. Split result length: ${coords.length}');
+      throw const ApiException("Invalid location format. Expected 'lat,lon'.");
+    }
+
+    // Conversione a double (numeri)
+    final double? lat = double.tryParse(coords[0].trim());
+    final double? lon = double.tryParse(coords[1].trim());
+
+    print('[ApiService DEBUG] Parsed Lat: $lat, Parsed Lon: $lon');
+
+    if (lat == null || lon == null) {
+      print('[ApiService DEBUG] ERROR: Lat or Lon is null after parsing.');
+      throw const ApiException("Latitude or longitude is not a valid number.");
+    }
+
     // The path /analyze-day is appended to the base URL which is /api
     final uri = Uri.parse('$_baseUrl/analyze-day');
 
-    // Construct the JSON request body
+    // 2. Construct the JSON request body with the required 'lat' and 'lon' keys
     final requestBody = json.encode({
-      'location': location,
+      'lat': lat,
+      'lon': lon,
       'userQuery': userQuery,
     });
+
+    print('[ApiService DEBUG] Final Payload: $requestBody');
 
     try {
       print('[ApiService Log] Calling RAG POST: $uri');
 
-      // --- RIGA DI CODICE PRECENDENTE (INVARIATA, COME CONTESTO) ---
       final response = await http
           .post(
             uri,
             headers: {'Content-Type': 'application/json'},
             body: requestBody, // Send the JSON body
           )
-          // --- NUOVO CODICE INCOLLATO (SOSTITUZIONE DEL BLOCCO .timeout) ---
+          // Timeout aumentato a 30 secondi per l'elaborazione AI
           .timeout(
-            // [TIMEOUT INCREASED] from 10 to 30 seconds for AI processing
             const Duration(seconds: 30),
             onTimeout: () =>
                 throw TimeoutException('API RAG timeout after 30s'),
           );
-      // --- FINE NUOVO CODICE ---
 
       if (response.statusCode == 200) {
         print('[ApiService Log] Analysis received successfully');
@@ -285,6 +306,7 @@ class ApiService {
         try {
           final errorJson = json.decode(response.body) as Map<String, dynamic>;
           errorMessage = errorJson['message'] ?? errorMessage;
+          print('[ApiService DEBUG] Server Error Message: $errorMessage');
         } catch (_) {
           // Ignore if body is not JSON or lacks 'message' key
         }

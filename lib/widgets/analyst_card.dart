@@ -97,13 +97,21 @@ class _AnalystCardState extends State<AnalystCard> {
       _currentState = AnalysisState.loading;
     });
 
-    const String placeholderLocation = 'Current Location';
-    const String placeholderQuery =
+    // *************************************************************************
+    // CORREZIONE CRITICA: Costruiamo la stringa di coordinate (lat,lon)
+    // *************************************************************************
+    final String locationCoords = '${widget.lat},${widget.lon}';
+
+    // Query fissa per l'analisi RAG
+    const String analysisQuery =
         'What are the best fishing conditions for today?';
+
+    print(
+        '[AnalystCard DEBUG] Inizio fetchAnalysis con coords: $locationCoords');
 
     try {
       final result = await _apiService.fetchAnalysis(
-          placeholderLocation, placeholderQuery);
+          locationCoords, analysisQuery); // USIAMO LA STRINGA DI COORDINATE
 
       if (!mounted) return;
       setState(() {
