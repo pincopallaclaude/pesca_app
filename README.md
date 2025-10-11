@@ -13,34 +13,48 @@ Sei un ingegnere informatico full-stack senior, con profonda esperienza nello sv
 L'applicazione e' uno strumento avanzato di previsioni meteo-marine per la pesca. Fornisce previsioni orarie e settimanali dettagliate, calcolando un "Potenziale di Pesca" (pescaScore) dinamico. La sua feature distintiva e' un assistente AI ("Insight di Pesca") basato su un'architettura RAG (Retrieval-Augmented Generation), che fornisce analisi strategiche giornaliere in linguaggio naturale. L'interfaccia, ispirata alle moderne app meteo, e' immersiva e funzionale, con sfondi che si adattano alle condizioni meteorologiche, icone vettoriali di alta qualita', e un sistema di design "Premium Plus" con palette calda, tipografia modulare e animazioni sofisticate.
 
 ---
-### 2. LOGICA DI CALCOLO DEL PESCASCORE (Versione 4.1 - Oraria e Aggregata)
+### 2. LOGICA DI CALCOLO DEL PESCASCORE (Versione 5.0 - Oraria e Contestuale)
 ---
 
 Il pescaScore e' evoluto da un valore statico giornaliero a una metrica dinamica oraria per una maggiore precisione.
 
-    2.1 Calcolo del Punteggio Orario
-        Per ogni ora, si calcola un numericScore partendo da una base di 3.0, modificata da parametri meteorologici e marini specifici all'ora e da trend giornalieri.
+	2.1 Calcolo del Punteggio Orario
+	Per ogni ora, si calcola un numericScore partendo da una base di 3.0, modificata da parametri meteorologici e marini specifici all’ora e da trend giornalieri. La logica è diventata più contestuale.
+	code Code
 
-        * Fattori Atmosferici:
-            - Pressione: trend giornaliero (In calo: +1.5, In aumento: -1.0).
-            - Vento: velocita' oraria (Moderato 5-20 km/h: +1.0, Forte >30 km/h: -2.0).
-            - Luna: fase giornaliera (Piena/Nuova: +1.0).
-            - Nuvole: copertura oraria (Coperto >60%: +1.0, Sereno <20% con Pressione >1018hPa: -1.0).
+		
+		Fattori Atmosferici:  
+		* **Pressione:** trend giornaliero (In calo: `+1.5`, In aumento: `-1.0`).  
+		* **Vento:** velocità oraria, con un punteggio contestuale alla temperatura dell'acqua.
+			- Moderato (5-20 km/h) con Acqua Calda (>20°C): `+1.5`
+			- Moderato (5-20 km/h) con Acqua Fredda (<=20°C): `+0.5`
+			- Forte (20-30 km/h): `-0.5`
+			- Molto Forte (>30 km/h): `-2.0`
+		* **Luna:** fase giornaliera (Piena/Nuova: `+1.0`).  
+		* **Nuvole:** copertura oraria (Coperto >60%: `+1.0`, Sereno <20% con Pressione >1018hPa: `-1.0`).  
 
-        * Fattori Marini:
-            - Stato Mare: altezza d'onda oraria (Poco mosso 0.5-1.25m: +2.0, Mosso 1.25-2.5m: +1.0, ecc.).
-            - Temperatura Acqua: valore orario (Ideale 12-20 C: +1.0, Estrema: -1.0).
-            - Correnti: il parametro e' gestito in Nodi (kn) e valuta l'intervallo di velocita' ideale.
-                - Ideale (0.3 - 0.8 kn): +1.0
-                - Forte (> 0.8 kn): -1.0
-                - Debole (<= 0.3 kn): +0.0
+		Fattori Marini:  
+		* **Stato Mare:** altezza d’onda oraria (Poco mosso 0.5-1.25m: `+2.0`, Mosso 1.25-2.5m: `+1.0`, ecc.).  
+		* **Temperatura Acqua:** valore orario, con una scala di punteggio a 6 livelli.
+			- Ottimale (14-20°C): `+1.5`
+			- Calda (20-23°C): `+1.0`
+			- Fresca (10-14°C): `+0.5`
+			- Troppo Fredda (<10°C): `-1.5`
+			- Troppo Calda (23-26°C): `-2.5`
+			- Estrema (>26°C): `-3.0`
+		* **Correnti:** valore orario in Nodi (kn).  
+			- Ideale (0.3 - 0.8 kn): `+1.0`  
+			- Forte (> 0.8 kn): `-1.0`  
+			- Debole (≤ 0.3 kn): `+0.0`
 
-    2.2 Aggregazione e Visualizzazione
-        - Punteggio Orario (hourlyScores): serie completa dei 24 punteggi orari inviata al frontend.
-        - Grafico "Andamento Potenziale Pesca": dialogo modale per visualizzare la serie.
-        - Punteggio Principale (Aggregato): media dei 24 punteggi orari mostrata nella card principale.
-        - Finestre di Pesca Ottimali: blocchi di 2 ore con la media piu' alta di pescaScore.
-        - Analisi Punteggio (Dettaglio): dialogo secondario che mostra i fattori (reasons) per un'ora rappresentativa.
+	  
+
+	2.2 Aggregazione e Visualizzazione
+		* Punteggio Orario (hourlyScores): serie completa dei 24 punteggi orari, ognuno con le sue reasons.
+		* Grafico "Andamento Potenziale Pesca": dialogo modale per visualizzare la serie dei punteggi.
+		* Punteggio Principale (Aggregato): media dei 24 punteggi orari.
+		* Finestre di Pesca Ottimali: blocchi di 2 ore con la media più alta di pescaScore.
+		* Analisi Punteggio (Dettaglio): dialogo secondario che mostra i fattori (reasons) per un’ora specifica.
 
 ---
 ### 3. ORGANIZZAZIONE DEI MICROSERVIZI (BACKEND)
@@ -290,6 +304,9 @@ Strategia di caching a due livelli:
     - NON creare widget con logica pesante nel metodo build()
     - NON fare chiamate API sincrone o senza timeout
     - NON hardcodare valori che potrebbero cambiare (usa costanti/config)
+      * Esempio VIETATO: Coordinate geografiche hardcodate (es. lat: 40.123, lon: 14.456)
+      * Esempio VIETATO: Magic numbers sparsi nel codice (es. if (score > 7.5))
+      * Soluzione: Definire costanti in file config separato
     - NON ignorare mai il caso null o liste vuote nei dati API
     - NON usare print() per log di produzione (solo per debug temporaneo)
     - NON duplicare logica: se una funzione e' usata 2+ volte, va estratta
@@ -298,6 +315,11 @@ Strategia di caching a due livelli:
     - NON creare liste con ListView normale per dati lunghi (usa .builder)
     - NON fare operazioni pesanti sul thread UI principale
     - NON usare asset PNG per icone (preferire vettoriali/IconData)
+    - NON creare "God Objects": file che gestiscono troppe responsabilita' diverse
+      * Sintomi: File > 500 righe, mix di business logic + I/O + presentazione
+      * Soluzione: Separare in moduli specializzati (vedi Sezione 9.1)
+    - NON accoppiare fortemente i moduli: ogni componente deve essere testabile in isolamento
+    - NON mescolare concerns diversi nello stesso file (business logic, formatting, caching, API calls)
 
     VINCOLI TECNICI CRITICI:
         - Ogni chiamata HTTP deve avere un timeout esplicito (max 10s, 30s per IA).
@@ -306,6 +328,186 @@ Strategia di caching a due livelli:
         - Tutti i valori nullable devono essere gestiti con ?. o ??.
         - Import ordinati: Dart SDK -> Flutter -> Package esterni -> Relativi.
         - File sorgente non devono superare 500 righe (splitta in piu' moduli).
+        - Ogni modulo deve avere UNA SOLA responsabilita' principale (Single Responsibility Principle).
+        - La testabilita' e' un requisito di design, non un'opzione.
+
+---
+### 9.1. GUIDA ALLA SEPARAZIONE DEI CONCERNS
+---
+
+    PRINCIPIO FONDAMENTALE: "Un modulo dovrebbe avere una sola ragione per cambiare" (SRP)
+
+    ANTI-PATTERN: God Object / Kitchen Sink Module
+        ❌ File che fa tutto: API calls + business logic + formatting + caching + presentation
+        ❌ Impossibile da testare in isolamento
+        ❌ Modifiche ad una feature rompono funzionalita' non correlate
+        ❌ Accoppiamento forte: dipendenze dirette sparse ovunque
+
+    PATTERN CORRETTO: Separation of Concerns
+        ✅ Services Layer: Solo chiamate API e gestione I/O
+        ✅ Domain Layer: Solo business logic e calcoli
+        ✅ Utils Layer: Solo utilities pure e formatting
+        ✅ Cache Layer: Solo gestione persistenza dati
+        ✅ Presentation Layer: Solo widget e UI logic
+
+    ESEMPIO DI REFACTORING:
+        PRIMA (God Object - 850 righe):
+            forecast_logic.dart:
+                - fetchFromAPI()
+                - calculateScore()
+                - formatData()
+                - cacheResults()
+                - buildUI()
+
+        DOPO (Separato):
+            lib/services/forecast_api_service.dart (120 righe)
+                - fetchFromAPI()
+            lib/domain/score_calculator.dart (180 righe)
+                - calculateScore()
+            lib/utils/data_formatter.dart (90 righe)
+                - formatData()
+            lib/services/cache_service.dart (140 righe)
+                - cacheResults()
+            lib/screens/forecast_screen.dart (220 righe)
+                - buildUI() + coordinamento
+
+    METRICHE DI QUALITA':
+        ✅ Test della Spiegazione (30 secondi): "Cosa fa questo modulo?" -> 1 frase
+        ✅ Test delle Responsabilita': "Perche' dovrebbe cambiare?" -> 1 sola ragione
+        ✅ Test dell'Import: < 7 dipendenze diverse
+        ✅ Test del Scroll: < 5 secondi per leggere tutto il file
+
+---
+### 9.2. GUIDA ALLE DIMENSIONI DEI MODULI (Code Review)
+---
+
+    I. RISPOSTE RAPIDE
+
+        Per Numero di Righe:
+            - Ottimale: 100-300 righe
+            - Accettabile: 300-500 righe
+            - Da Refactorare SUBITO: > 500 righe
+
+        Per Numero di Caratteri:
+            - Ottimale: 5.000-15.000 caratteri
+            - Accettabile: 15.000-25.000 caratteri
+            - Da Refactorare SUBITO: > 25.000 caratteri
+
+    II. METRICHE SPECIFICHE PER TIPO DI MODULO
+
+        1. Utilities (lib/utils/)
+            - Linee: 50-200
+            - Caratteri: 2.000-10.000
+            - Funzioni: 3-10 funzioni pure
+            - Dipendenze: Minime (solo Dart SDK)
+            - Esempio: formatter.dart, date_utils.dart
+
+        2. Domain Logic (lib/domain/)
+            - Linee: 100-300
+            - Caratteri: 5.000-15.000
+            - Funzioni: 1-3 funzioni core + helper
+            - Dipendenze: Solo modelli e utilities
+            - Esempio: score_calculator.dart, validation_rules.dart
+
+        3. Services (lib/services/)
+            - Linee: 50-200
+            - Caratteri: 3.000-12.000
+            - Funzioni: 1-2 funzioni principali + error handling
+            - Dipendenze: http, modelli, config
+            - Esempio: api_service.dart, cache_service.dart
+
+        4. Orchestratori/Coordinatori (lib/controllers/)
+            - Linee: 200-400 (MAX ASSOLUTO)
+            - Caratteri: 10.000-20.000
+            - Complessita': Alta, ma ZERO business logic
+            - Ruolo: Coordinano services, delegano a domain layer
+            - Esempio: forecast_controller.dart
+
+        5. Screens/Pages (lib/screens/)
+            - Linee: 150-350
+            - Caratteri: 8.000-18.000
+            - Logica: Solo UI logic e chiamate a controller
+            - Esempio: forecast_screen.dart
+
+    III. TEST PRATICI PER VALUTARE UN MODULO
+
+        A. Test dello Schermo
+            - Un modulo dovrebbe essere leggibile su UN SOLO SCHERMO senza scroll eccessivo
+            - Max 200-250 righe per mantenere la "mental map"
+
+        B. Test della Spiegazione (30 secondi)
+            - Domanda: "Cosa fa questo modulo?"
+            - ✅ Buono: Risposta in 1 frase
+            - ❌ Male: "Beh, fa X, ma anche Y, e poi Z..."
+
+        C. Test delle Responsabilita'
+            - Quante risposte diverse alla domanda "Perche' dovrebbe cambiare?"
+            - ✅ Ottimale: 1 ragione (Single Responsibility)
+            - ❌ Critico: 3+ ragioni -> REFACTOR IMMEDIATO
+
+        D. Test dell'Import
+            - ❌ MALE: Troppe dipendenze (es. 10+ imports diversi)
+            - ✅ BENE: Dipendenze focalizzate (solo quelle necessarie per lo scopo primario)
+
+        E. Test del Scroll
+            - Scroll del file dall'inizio alla fine...
+            - ✅ Ottimo: < 5 secondi
+            - ❌ Troppo grande: > 10 secondi -> REFACTOR
+
+        F. Test della Testabilita'
+            - Domanda: "Posso testare questa funzione in isolamento senza mock complessi?"
+            - ✅ SI: Architettura corretta
+            - ❌ NO: Accoppiamento eccessivo, refactor necessario
+
+    IV. STANDARD DELL'INDUSTRIA (Riferimenti)
+
+        - Google Style Guide (JavaScript/Dart): Max 400 righe per file
+        - Airbnb Style Guide: Max 300-400 righe
+        - Uncle Bob (Clean Code):
+            * Funzioni: 5-15 righe
+            * Moduli: < 200 righe ideali
+        - Microsoft (TypeScript Guidelines):
+            * Max 500 righe con strong typing
+            * Max 300 righe per JavaScript
+        - Flutter Best Practices:
+            * Widget files: < 300 righe
+            * Services: < 200 righe
+            * Utilities: < 150 righe
+
+    V. INDICATORI DI ALLARME (Red Flags)
+
+        🚨 REFACTOR URGENTE se il modulo presenta 2+ di questi sintomi:
+            - File > 500 righe o > 25.000 caratteri
+            - Mix di business logic + I/O + presentazione
+            - Impossibile spiegare in 1 frase cosa fa
+            - Richiede > 10 secondi per essere letto completamente
+            - Contiene commenti del tipo "Questa sezione fa..." (indica troppi scopi)
+            - Test unitari richiedono mock di 5+ dipendenze diverse
+            - Modifiche ad una feature rompono funzionalita' non correlate
+            - Piu' di 3 ragioni per cui potrebbe dover cambiare
+
+    VI. STRATEGIA DI REFACTORING
+
+        FASE 1: Identificazione
+            1. Misura righe e caratteri
+            2. Applica i Test Pratici (Sezione III)
+            3. Identifica le responsabilita' multiple
+
+        FASE 2: Pianificazione
+            1. Disegna la nuova struttura a moduli separati
+            2. Identifica le dipendenze da invertire
+            3. Pianifica l'ordine di estrazione (dal piu' semplice)
+
+        FASE 3: Esecuzione
+            1. Estrai utilities pure per prime (zero dipendenze)
+            2. Estrai domain logic (dipende solo da utilities)
+            3. Estrai services (dipende da domain + utilities)
+            4. Riduci il modulo originale a coordinatore
+
+        FASE 4: Validazione
+            1. Verifica che ogni nuovo modulo passi i Test Pratici
+            2. Scrivi test unitari per ogni modulo isolato
+            3. Verifica che il modulo coordinatore sia < 400 righe
 
 ---
 ### 10. ESEMPI DI CODICE REFERENCE (Best Practice)
@@ -314,8 +516,7 @@ Strategia di caching a due livelli:
     #### ESEMPIO 1: Gestione Errori API (api_service.dart)
 
     CORRETTO: Gestione robusta con timeout, fallback su cache e log specifici.
-
-    ```dart
+```dart
     Future<Map<String, dynamic>> fetchForecast(double lat, double lon) async {
       final uri = Uri.parse('$_baseUrl/api/forecast?lat=$lat&lon=$lon');
 
@@ -341,177 +542,7 @@ Strategia di caching a due livelli:
         return await _getCachedDataOrFallback(lat, lon);
       }
     }
-    ```
 
-    #### ESEMPIO 2: Widget Performante e Riutilizzabile (data_pill.dart)
-
-    CORRETTO: Widget const e stateless, che delega la logica complessa.
-
-    ```dart
-    class DataPill extends StatelessWidget {
-      const DataPill({
-        super.key,
-        required this.label,
-        required this.value,
-        required this.unit,
-        required this.heatmapColor,
-      });
-
-      final String label;
-      final String value;
-      final String unit;
-      final Color heatmapColor;
-
-      @override
-      Widget build(BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: heatmapColor.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: heatmapColor, width: 1.5),
-          ),
-          child: Column(
-            children: [
-              Text(label, style: TextStyle(fontSize: 12, color: Colors.white70)),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(width: 2),
-                  Text(unit, style: TextStyle(fontSize: 12, color: Colors.white70)),
-                ],
-              ),
-            ],
-          ),
-        );
-      }
-    }
-    ```
----
-### 11. CHECKLIST DI QUALITA (Pre-Commit / Pre-PR)
----
-    Prima di finalizzare qualsiasi modifica, verificare ogni punto:
-
-    CODICE:
-      - [ ] Il codice e' stato formattato con `dart format .`?
-      - [ ] L'analizzatore statico (`flutter analyze`) non riporta errori o warning?
-      - [ ] Nessun anti-pattern della sezione 9 e' stato introdotto?
-      - [ ] Le nuove funzioni/classi sono documentate (commenti in inglese)?
-      - [ ] Sono stati aggiunti log di debug nei punti critici?
-
-    PERFORMANCE:
-      - [ ] I nuovi widget sono `const` dove possibile?
-      - [ ] Le liste lunghe usano `ListView.builder` o `GridView.builder`?
-      - [ ] Nessuna operazione pesante (JSON parsing) viene eseguita nel `build()`?
-
-    UI/UX:
-      - [ ] La UI e' responsive e non ha overflow?
-      - [ ] Il contrasto testo/sfondo e' sufficiente?
-      - [ ] Le animazioni sono fluide (verificato su device reale)?
-
----
-### 12. WORKFLOW DIAGNOSTICO STANDARD
----
-    In caso di bug, seguire rigorosamente questi passaggi:
-
-    1. RICHIESTA LOG: Chiedere sempre e solo i log pertinenti.
-    2. ANALISI LOG:
-        - Cercare [ERRORE], [Timeout], [Exception], status HTTP != 200.
-        - Identificare il componente che ha generato l'errore.
-        - Verificare la conformita' dei dati ricevuti.
-    3. RIPRODUZIONE ISOLATA: Tentare di riprodurre il bug con i parametri specifici.
-    4. ISPEZIONE CODICE: Ispezionare la logica pertinente nel file sorgente.
-    5. PROPOSTA SOLUZIONE: Fornire la modifica usando il template obbligatorio.
-    6. VALIDAZIONE: Chiedere conferma della risoluzione tramite nuovi log.
-
----
-### 13. MATRICE DECISIONALE TECNICA
----
-    +------------------------------------+----------------------------------+--------------------------------------+------------------------------------------------------------------------------------------+
-    | SCENARIO                           | OPZIONE A                        | OPZIONE B                            | DECISIONE GUIDATA                                                                        |
-    +------------------------------------+----------------------------------+--------------------------------------+------------------------------------------------------------------------------------------+
-    | Gestione Stato UI                  | StatefulWidget + setState        | Package esterno (es. Provider)       | USARE A per stato locale. USARE B per stato condiviso. In questo progetto, A e' preferito. |
-    | Logica di Business nel Frontend    | Logica dentro al Widget          | Estrarla in un Service/Controller    | USARE SEMPRE B. SRP e testabilita' sono prioritari.                                      |
-    | Aggiunta Nuova Funzionalita Backend| Modificare /api/forecast         | Creare un nuovo endpoint /api/tides  | USARE B per funzionalita' distinte. USARE A solo per arricchimenti minori.                |
-    | Animazioni UI                      | AnimationController manuale      | Pacchetto (staggered_animations)     | USARE B per animazioni comuni. USARE A solo per animazioni complesse e personalizzate.   |
-    +------------------------------------+----------------------------------+--------------------------------------+------------------------------------------------------------------------------------------+
-
----
-### 14. TEMPLATE DI COMUNICAZIONE (Standard Output AI)
----
-
-    ## OBIETTIVO
-    *Una sintesi chiara e concisa di cio' che la richiesta vuole ottenere.*
-
-    ## ANALISI
-    *Il mio processo di pensiero. Spiego come ho interpretato il problema, i file analizzati (es. forecast_screen.dart, score.calculator.js) e le ragioni tecniche della soluzione, riferendomi ai principi del prompt (performance, estetica, anti-pattern, etc.).*
-
-    ## SOLUZIONE PROPOSTA
-    *Una descrizione ad alto livello della soluzione.*
-
-    ## ISTRUZIONI DI IMPLEMENTAZIONE
-    *Istruzioni passo-passo per applicare le modifiche. Ogni blocco di codice sara' presentato con il suo contesto.*
-
-    ### lib/path/to/nome_file.dart
-    ```dart
-    // --- RIGA DI CODICE PRECENDENTE (INVARIATA, COME CONTESTO) ---
-    [...codice esistente...]
-
-    // --- NUOVO CODICE DA INCOLLARE (IN SOSTITUZIONE / IN AGGIUNTA) ---
-    [...nuovo codice...]
-    // --- FINE NUOVO CODICE ---
-
-    // --- RIGA DI CODICE SUCCESSIVA (INVARIATA, COME CONTESTO) ---
-    [...codice esistente...]
-    ```
----
-### 15. PRINCIPIO DI VERIFICA DEL CONTESTO (OBBLIGATORIO)
----
-
-    REGOLA AUREA: Non fornire mai soluzioni basate su assunzioni. Prima di proporre modifiche al codice, l'AI DEVE verificare il contesto reale.
-
-        15.1 PROTOCOLLO DI DOMANDE PRELIMINARI
-
-            FASE 1: ANALISI DELLA RICHIESTA
-                1. Identifica quali file/moduli sono potenzialmente coinvolti.
-                2. Determina se le informazioni sono sufficienti.
-                3. Se NO, passa alla FASE 2.
-
-            FASE 2: RICHIESTA INFORMAZIONI MANCANTI
-                - "Quale file contiene la logica X?"
-                - "Puoi inviarmi la firma attuale del metodo Y?"
-                - "Qual e' la struttura dati JSON della risposta di Z?"
-
-            FASE 3: CONFERMA PRIMA DELLA SOLUZIONE
-                1. Riepiloga brevemente cosa hai compreso.
-                2. Indica esplicitamente quale file modificherai.
-                3. Solo DOPO, procedi con il template della Sezione 14.
-
-        15.2 ESEMPI DI APPLICAZIONE
-
-            SCORRETTO (Fantasticare):
-                Utente: "Il grafico non si aggiorna."
-                AI: "Modifica _updateChart() in forecast_screen.dart..."
-
-            CORRETTO (Verificare):
-                Utente: "Il grafico non si aggiorna."
-                AI: "Per diagnosticare, ho bisogno di sapere: In quale file e' il widget del grafico? Puoi inviarmi la sezione di codice che gestisce l'aggiornamento?"
-
-        15.3 CASISTICHE DI VERIFICA OBBLIGATORIA
-            - Modifiche/refactoring di codice esistente.
-            - Risoluzione di bug.
-            - Aggiunta di funzionalita' che si integrano con l'esistente.
-
-        15.4 ECCEZIONI (Quando NON serve verificare)
-            - Domande teoriche/concettuali.
-            - Creazione di nuovi file da specifiche complete.
-            - Spiegazioni di codice fornito dall'utente nel messaggio.
-
-    PROMEMORIA CRITICO: La precisione chirurgica e' preferibile alla velocita' approssimativa.
 
 ---
 
@@ -652,21 +683,21 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- reverse-geocode.js # Modulo che esporta funzionalità o dati.
 |-- lib/ # Contiene tutta la logica di business e i moduli core dell'applicazione.
 |   |-- domain/ # Contiene la logica di business pura, slegata da API e framework.
-|   |   |-- knowledge_base.js # La fonte di verita' per la conoscenza sulla pesca. Definisce i "documenti" testuali (es. schede sulla spigola, tecniche di traina) che vengono poi vettorizzati e inseriti nel database vettoriale dallo script seeder.
-|   |   |-- score.calculator.js # Motore di calcolo del "Potenziale di Pesca". Riceve dati meteo-marini orari e restituisce un punteggio numerico (`pescaScore`) e le ragioni testuali che lo hanno determinato. E' una logica puramente algoritmica.
-|   |   `-- window.calculator.js # Algoritmo di ottimizzazione. Analizza la serie di 24 punteggi orari e identifica i blocchi di 2 ore con la media piu' alta, restituendoli come "Finestre di Pesca Ottimali".
-|   |-- services/ # Specialisti della comunicazione con sistemi esterni. Ogni file gestisce una singola API o servizio.
-|   |   |-- gemini.service.js # L'interfaccia con l'IA di Google. Espone due funzionalita' chiave: 1) la generazione di testo (`generateAnalysis`) per l'insight RAG, e 2) la generazione di embedding (`batchEmbedContents`) usata dallo script seeder per vettorizzare la knowledge base.
-|   |   |-- openmeteo.service.js # Data provider per le previsioni orarie ad alta risoluzione (temperatura, vento, onde, etc.).
-|   |   |-- stormglass.service.js # Data provider premium. Fornisce dati marini di alta precisione (velocita' e direzione della corrente) solo per localita' specifiche.
-|   |   |-- vector.service.js # Il "motore di ricerca semantico" del RAG. Incapsula la logica di comunicazione con il database vettoriale (ChromaDB o custom). Espone la funzione `queryKnowledgeBase` che, data una query testuale, restituisce i "fatti" piu' pertinenti.
-|   |   `-- wwo.service.js # Data provider per dati giornalieri di base come astronomia (alba/tramonto) e maree.
-|   |-- utils/ # Funzioni di utilita' pure, generiche e riutilizzabili.
-|   |   |-- cache.manager.js # Gestore della cache centralizzato. Configura ed esporta l'istanza di `node-cache`.
-|   |   |-- formatter.js # Libreria di formattazione. Contiene funzioni per standardizzare la presentazione dei dati (es. orari, acronimi del mare, capitalizzazione).
-|   |   `-- wmo_code_converter.js # Traduttore di codici meteo. Converte codici numerici (WMO) in rappresentazioni testuali o simboliche comprensibili dall'utente (es. direzione del vento).
-|   |-- forecast-logic.js # Il "Direttore d'Orchestra" per i dati meteo. E' la funzione master `getUnifiedForecastData` che orchestra la chiamata a tutti i servizi meteo (OpenMeteo, WWO, Stormglass), gestisce la cache, assembla i dati in un formato unificato e calcola il `pescaScore` e le finestre di pesca. E' usato sia dall'endpoint `/forecast` che dall'endpoint di analisi.
-|   `-- forecast.assembler.js # (Implied, might be part of forecast-logic) L' "Operaio Specializzato". Esegue il lavoro "sporco" di unire le risposte JSON eterogenee provenienti dalle varie API meteo in un'unica struttura dati coerente e intermedia.
+|   |   |-- knowledge_base.js # La "libreria" statica. Definisce i documenti di testo grezzi sulla pesca che verranno usati per popolare il database vettoriale. Non contiene logica, solo dati.
+|   |   |-- score.calculator.js # Il "Calcolatore". Contiene la funzione pura `calculateHourlyPescaScore`. La sua unica responsabilita' e' prendere dati meteo-marini e restituire un punteggio numerico e le ragioni.
+|   |   `-- window.calculator.js # L' "Ottimizzatore". Contiene la funzione pura `findBestTimeWindow`. La sua unica responsabilita' e' analizzare una serie di punteggi e trovare le fasce orarie migliori.
+|   |-- services/ # "Ambasciatori" verso il mondo esterno. Ogni file gestisce la comunicazione con una singola API.
+|   |   |-- gemini.service.js # Interfaccia con Google AI. Espone `generateAnalysis` (per creare testo) e la logica di embedding per il seeder.
+|   |   |-- openmeteo.service.js # Specialista di Open-Meteo. Contiene la funzione `fetchOpenMeteoHourly` che recupera i dati orari ad alta risoluzione.
+|   |   |-- stormglass.service.js # Specialista di Stormglass. Contiene la funzione `fetchStormglassData` che recupera i dati marini premium (corrente).
+|   |   |-- vector.service.js # Il "Bibliotecario Intelligente". Incapsula la logica di ricerca nel database vettoriale. Espone `queryKnowledgeBase` per trovare i "fatti" piu' pertinenti.
+|   |   `-- wwo.service.js # Specialista di WorldWeatherOnline. Contiene la funzione `fetchWwoDaily` per recuperare dati base come astronomia e maree.
+|   |-- utils/ # La "cassetta degli attrezzi". Funzioni pure, piccole e riutilizzabili ovunque.
+|   |   |-- cache.manager.js # Gestore della Cache. Esporta l'istanza `myCache` e la logica di locking (`cacheLocks`) per un accesso centralizzato e sicuro.
+|   |   |-- formatter.js # Specialista di Formattazione. Contiene tutte le funzioni per la presentazione dei dati (es. `formatTimeToHHMM`, `capitalize`, `getSeaStateAcronym`).
+|   |   |-- geo.utils.js # Specialista Geospaziale. Contiene funzioni puramente matematiche/geografiche, come `areCoordsNear`.
+|   |   `-- wmo_code_converter.js # Specialista di Codici Meteo. Contiene `convertWmoToWwoCode`, `getWeatherDescription`, e `degreesTo16PointDirection`.
+|   `-- forecast-logic.js # IL DIRETTORE D'ORCHESTRA. E' l'unico file con logica complessa di coordinamento. La sua funzione master `getUnifiedForecastData` NON contiene piu' la logica di business o di fetching, ma si limita a: 1. Gestire la cache. 2. Chiamare i vari `services` per ottenere i dati grezzi. 3. Assemblare i dati. 4. Chiamare i `domain` calculators per arricchire i dati con `pescaScore` e finestre. 5. Restituire il payload finale.
 |-- public/ # Contiene file statici serviti al client.
 |   |-- fish_icon.png # File di tipo '.png'.
 |   |-- half_moon.png # File di tipo '.png'.

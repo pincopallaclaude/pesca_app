@@ -290,14 +290,17 @@ class ApiService {
         final data = json.decode(response.body) as Map<String, dynamic>;
 
         // Handle potential null/empty analysis result (Critical Constraint)
-        final analysis =
-            data['analysis'] as String? ?? 'No analysis available.';
-
-        if (analysis == 'No analysis available.') {
-          throw ApiException("AI response was empty or non-committal.");
+        if (data['status'] == 'success' &&
+            data['data'] is String &&
+            (data['data'] as String).isNotEmpty) {
+          final analysisMarkdown = data['data'] as String;
+          return analysisMarkdown;
+        } else {
+          // This case handles backend logical errors (e.g., status: 'error') or empty data field
+          final errorMessage = data['message'] as String? ??
+              "AI response was empty or non-committal.";
+          throw ApiException(errorMessage);
         }
-
-        return analysis;
       } else {
         print(
             '[ApiService Log] HTTP error for analysis: ${response.statusCode}');
