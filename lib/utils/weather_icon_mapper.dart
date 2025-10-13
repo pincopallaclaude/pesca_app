@@ -74,6 +74,22 @@ IconData getWeatherIcon(String weatherCode, {bool isDay = true}) {
   }
 }
 
+/// Mappa una stringa emoji-based (es. '☀️') a un'Icona e un Colore.
+/// Questa funzione funge da ponte per i dati provenienti dal parsing iniziale in ApiService.
+Map<String, dynamic> mapLegacyIconString(String iconString) {
+  if (iconString.contains('☀️')) {
+    return {'icon': Icons.wb_sunny, 'icon_color': Colors.yellow.shade600};
+  }
+  if (iconString.contains('🌧️')) {
+    return {'icon': Icons.umbrella, 'icon_color': Colors.blue.shade300};
+  }
+  if (iconString.contains('☁️')) {
+    return {'icon': Icons.cloud_outlined, 'icon_color': Colors.grey.shade400};
+  }
+  // Fallback per icone non riconosciute
+  return {'icon': Icons.help_outline, 'icon_color': Colors.grey};
+}
+
 /// Restituisce il colore appropriato per l'icona meteo in base
 /// al codice e al contesto (giorno/notte) per garantire il contrasto.
 Color getWeatherIconColor(String weatherCode, {bool isDay = true}) {

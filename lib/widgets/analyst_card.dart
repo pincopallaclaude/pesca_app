@@ -6,6 +6,8 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/api_service.dart';
+import '../models/forecast_data.dart';
+import 'analysis_skeleton_loader.dart';
 import 'glassmorphism_card.dart';
 
 // -----------------------------------------------------------------------------
@@ -43,12 +45,14 @@ class AnalystCard extends StatefulWidget {
   final double lat;
   final double lon;
   final VoidCallback onClose;
+  final List<ForecastData> forecastData;
 
   const AnalystCard({
     super.key,
     required this.lat,
     required this.lon,
     required this.onClose,
+    required this.forecastData,
   });
 
   @override
@@ -111,7 +115,10 @@ class _AnalystCardState extends State<AnalystCard> {
 
     try {
       final result = await _apiService.fetchAnalysis(
-          locationCoords, analysisQuery); // USIAMO LA STRINGA DI COORDINATE
+        locationCoords,
+        analysisQuery,
+        forecastData: widget.forecastData, // <-- PASSAGGIO DEI DATI
+      );
 
       if (!mounted) return;
       setState(() {
@@ -156,37 +163,20 @@ class _AnalystCardState extends State<AnalystCard> {
   @override
   Widget build(BuildContext context) {
     return GlassmorphismCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: switch (_currentState) {
-            AnalysisState.loading =>
-              _buildLoadingIndicator(key: const ValueKey('loading')),
-            AnalysisState.success =>
-              _buildSuccessCard(key: const ValueKey('success')),
-            AnalysisState.error =>
-              _buildErrorCard(key: const ValueKey('error')),
-          },
-        ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 400),
+        transitionBuilder: (child, animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: switch (_currentState) {
+          AnalysisState.loading =>
+            // ASSICURATI CHE QUESTA SIA LA RIGA PRESENTE
+            const AnalysisSkeletonLoader(key: ValueKey('loading')),
+          AnalysisState.success =>
+            _buildSuccessCard(key: const ValueKey('success')),
+          AnalysisState.error => _buildErrorCard(key: const ValueKey('error')),
+        },
       ),
-    );
-  }
-
-  Widget _buildLoadingIndicator({Key? key}) {
-    return Column(
-      key: key,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 20),
-        const CircularProgressIndicator(color: Colors.cyanAccent),
-        const SizedBox(height: 16),
-        Text(
-          "L'IA sta analizzando i dati...",
-          style: GoogleFonts.lato(color: Colors.white70, fontSize: 16),
-        ),
-        const SizedBox(height: 20),
-      ],
     );
   }
 

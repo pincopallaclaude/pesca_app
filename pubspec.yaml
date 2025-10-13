@@ -28,6 +28,7 @@ dependencies:
   palette_generator: ^0.3.3+3
   shared_preferences: ^2.2.3
   weather_icons: ^3.0.0
+  shimmer: ^3.0.0
 
   
 

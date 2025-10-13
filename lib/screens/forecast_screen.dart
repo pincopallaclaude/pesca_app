@@ -362,10 +362,26 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                         0.75, // Limits height to 75% of screen
                                   ),
                                   child: AnalystCard(
-                                    key: const ValueKey("analysis_card"),
-                                    lat: 40.7957,
-                                    lon: 14.1889,
+                                    key: ValueKey(
+                                        "analysis_card_${_currentPageIndex}"), // Chiave dinamica
+                                    // Passa le coordinate della giornata attualmente visualizzata
+                                    lat: forecasts[_currentPageIndex]
+                                            .hourlyData
+                                            .isNotEmpty
+                                        ? (forecasts[_currentPageIndex]
+                                                .hourlyData[0]['latitude'] ??
+                                            40.813)
+                                        : 40.813,
+                                    lon: forecasts[_currentPageIndex]
+                                            .hourlyData
+                                            .isNotEmpty
+                                        ? (forecasts[_currentPageIndex]
+                                                .hourlyData[0]['longitude'] ??
+                                            14.208)
+                                        : 14.208,
                                     onClose: _toggleAnalysis,
+                                    // ECCO IL PASSAGGIO DEI DATI CHE RISOLVE L'ERRORE
+                                    forecastData: forecasts,
                                   ),
                                 ),
                               ))

@@ -157,6 +157,43 @@ class ForecastData {
     );
   }
 
+  /// Serializza l'oggetto ForecastData in una mappa JSON.
+  Map<String, dynamic> toJson() {
+    return {
+      'giornoNome': giornoNome,
+      'giornoData': giornoData,
+      'meteoIcon': meteoIcon,
+      'temperaturaAvg': temperaturaAvg,
+      'tempMinMax': tempMinMax,
+      'ventoDati': ventoDati,
+      'pressione': pressione,
+      'umidita': umidita,
+      'mare': mare,
+      'maree': 'Alta: $altaMarea | Bassa: $bassaMarea',
+      'faseLunare': faseLunare,
+      'alba': alba,
+      'tramonto': tramonto,
+      'finestraMattino': {'orario': finestraMattino},
+      'finestraSera': {'orario': finestraSera},
+      'pescaScoreData': {
+        'numericScore': pescaScoreNumeric,
+        'hourlyScores': hourlyScores,
+      },
+      'temperaturaMax': temperaturaMax,
+      'temperaturaMin': temperaturaMin,
+      'trendPressione': trendPressione,
+      'dailyWeatherCode': dailyWeatherCode,
+      'dailyHumidity': dailyHumidity,
+      'dailyPressure': dailyPressure,
+      'dailyWindSpeedKn': dailyWindSpeedKn,
+      'dailyWindDirectionDegrees': dailyWindDirectionDegrees,
+      'sunriseTime': sunriseTime,
+      'sunsetTime': sunsetTime,
+      'moonPhase': moonPhase,
+      'hourly': hourlyData,
+    };
+  }
+
   /// Restituisce la previsione oraria più vicina al momento attuale.
   Map<String, dynamic> get currentHourData {
     if (hourlyData.isEmpty) {

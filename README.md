@@ -60,24 +60,24 @@ Il pescaScore e' evoluto da un valore statico giornaliero a una metrica dinamica
 ### 3. ORGANIZZAZIONE DEI MICROSERVIZI (BACKEND)
 ---
 
-L'architettura backend (pesca-api) e' un'applicazione Node.js (Express.js) composta da due macro-componenti: A) Servizi REST tradizionali e B) Sistema AI "Insight di Pesca" (RAG).
+L'architettura backend (pesca-api) e' un'applicazione Node.js (Express.js) progettata per un'esperienza utente a latenza quasi zero, composta da due macro-componenti: A) Servizi REST tradizionali e B) Sistema AI Proattivo "Insight di Pesca" (P.H.A.N.T.O.M.).
 
     3.A - ENDPOINT REST TRADIZIONALI
-        - /api/forecast: Restituisce le previsioni complete.
-        - /api/update-cache: Per l'aggiornamento proattivo della cache via Cron Job.
+        - /api/forecast: Restituisce le previsioni complete e innesca l'analisi AI proattiva in background.
+        - /api/update-cache: Per l'aggiornamento proattivo della cache meteo via Cron Job, che a sua volta innesca l'analisi AI.
         - /api/autocomplete: Per i suggerimenti di localita'.
         - /api/reverse-geocode: Per la geolocalizzazione inversa.
 
-    3.B - SISTEMA AI: "INSIGHT DI PESCA" (v6.0 - RAG)
-        La funzionalita' "Insight di Pesca" trasforma l'app da visualizzatore di dati a consulente strategico.
+    3.B - SISTEMA AI: "INSIGHT DI PESCA" (v7.0 - P.H.A.N.T.O.M.)
+        La nuova architettura trasforma l'IA da reattiva a preveggente, preparando l'analisi prima che l'utente la richieda.
 
-        * Flusso RAG (Retrieval-Augmented Generation):
-            1. Richiesta Utente: Il frontend invia le coordinate (lat/lon) all'endpoint /api/analyze-day.
-            2. Recupero Dati (Meteo): Il backend ottiene i dati meteo-marini reali per la localita'.
-            3. Recupero Conoscenza (Vettoriale): Una sintesi dei dati viene usata per interrogare un database vettoriale (ChromaDB) e recuperare i "fatti" piu' pertinenti (tecniche, biologia, etc.).
-            4. Generazione Aumentata (Prompting): Un "mega-prompt" viene costruito dinamicamente con ruolo AI, dati meteo, "fatti" recuperati e istruzioni di formattazione Markdown.
-            5. Chiamata a LLM: Il prompt viene inviato a Google Gemini Pro.
-            6. Risposta Formattata: L'IA restituisce un'analisi strategica in Markdown, che il frontend visualizza.
+        * Flusso P.H.A.N.T.O.M. (Proactive, Hyper-localized, Awaited-knowledge...):
+            1. Innesco Proattivo (Background): Dopo un aggiornamento dei dati meteo (via /api/forecast o Cron Job), il backend avvia un'analisi RAG completa in background, senza attendere. Il risultato viene salvato in una analysisCache dedicata.
+            2. Richiesta Utente (Latenza Zero): Il frontend chiama il nuovo endpoint /api/get-analysis.
+            3. Controllo Cache Istantanea: Il backend controlla la analysisCache.
+                - Cache HIT (Caso Ideale): L'analisi e' pronta. Viene restituita immediatamente (< 50ms).
+                - Cache MISS (Caso Fallback): Viene restituito uno stato pending.
+            4. Fallback On-Demand (se necessario): Il frontend chiama /api/analyze-day-fallback. Il backend esegue un'analisi RAG on-demand, ma ottimizzata perche' riutilizza i dati meteo gia' presenti nella cache principale, saltando le chiamate API esterne.
 
         * Knowledge Base (Database Vettoriale):
             - Tecnologia: ChromaDB in-memory (per POC/MVP).
@@ -88,13 +88,19 @@ L'architettura backend (pesca-api) e' un'applicazione Node.js (Express.js) compo
 ### 4. GESTIONE DELLA CACHE
 ---
 
-Strategia di caching a due livelli:
+Strategia di caching a tre livelli per performance estreme:
 
-    4.1 Cache Backend (lato Server)
-        - Gestita con node-cache, ha un TTL di 6 ore.
-        - Aggiornamento proattivo per Posillipo via Cron Job.
+    4.1 Cache Dati Meteo (Backend - lato Server)
+        - Gestita con node-cache (myCache), ha un TTL di 6 ore.
+        - Contiene i dati di previsione grezzi e processati.
+        - Viene popolata dalla prima richiesta utente o dal Cron Job.
 
-    4.2 Cache Frontend (lato Client)
+    4.2 Cache Analisi AI (Backend - lato Server)
+        - Gestita con una seconda istanza di node-cache (analysisCache), con un TTL piu' breve (es. 2 ore).
+        - Contiene solo il testo Markdown dell'analisi AI pre-generata.
+        - E' la chiave dell'esperienza a latenza zero.
+
+    4.3 Cache Frontend (lato Client)
         - L'app Flutter usa shared_preferences con un TTL di 6 ore.
         - Garantisce caricamenti istantanei e fallback su dati obsoleti.
 
@@ -130,18 +136,23 @@ Strategia di caching a due livelli:
 ---
 
     * Backend (pesca-api):
-        - La struttura modulare supporta l'architettura RAG con responsabilita' separate:
-            - services/: "Comunicatori" con API esterne (inclusi gemini.service.js e vector.service.js).
+        - La struttura modulare e' stata rafforzata per supportare l'architettura P.H.A.N.T.O.M. con responsabilita' separate:
+            - services/: "Comunicatori" con API esterne (inclusi gemini.service.js e vector.service.js) e proactive_analysis.service.js che isola la logica RAG eseguita in background.
             - domain/: Logica di business pura, inclusa la knowledge_base.js.
+            - utils/: Include cache.manager.js che ora esporta due istanze di cache separate.
             - tools/: Script di supporto allo sviluppo (es. seeder-vector.js).
-        - La rotta /api/analyze-day orchestra l'intero flusso RAG.
+        - Le rotte sono state specializzate:
+            - /api/get-analysis: Endpoint primario, ultra-leggero, solo per il controllo della cache.
+            - /api/analyze-day-fallback: Endpoint secondario per la generazione on-demand.
 
     * Frontend (pesca_app):
         - La struttura modulare supporta un Design System avanzato ("Premium Plus").
         - Gestione Stato Globale (forecast_screen.dart): Lo stato dei componenti modali e' gestito a livello di schermata per abilitare effetti globali come il "Modal Focus".
+        - La logica di interazione con l'IA e' stata resa piu' intelligente:
+            - api_service.dart: Orchestra il flusso a due fasi, chiamando prima /api/get-analysis e poi, solo se necessario, /api/analyze-day-fallback.
+            - analyst_card.dart (chiave): Mostra l'analisi RAG con motion design a cascata ("stagger"), tipografia avanzata (Lato, Lora), palette calda (ambra/corallo), e layout scorrevole. Riceve i dati di ForecastData dalla schermata principale per ottimizzare la chiamata di fallback, eliminando la ridondanza dei dati.
         - Widgets Potenziati ("Premium Plus"):
             - main_hero_module.dart: Usa uno Stack per visualizzare la card di analisi in un layer sovrapposto, con un trigger animato e BackdropFilter.
-            - analyst_card.dart (chiave): Mostra l'analisi RAG con motion design a cascata ("stagger"), tipografia avanzata (Lato, Lora), palette calda (ambra/corallo), e layout scorrevole.
             - hourly_forecast.dart / weekly_forecast.dart: Componenti esistenti pronti per essere allineati al nuovo Design System.
 
 ---
@@ -152,11 +163,15 @@ Strategia di caching a due livelli:
 |     FLUTTER APP (Android)             |
 +---------------------------------------+
          |           |
-         |           | (HTTP GET /api/forecast)
+         |           | (1. HTTP GET /api/forecast)
          |           |
          |           +--------------------------------+
          |                                            |
-         | (HTTP POST /api/analyze-day)               |
+         | (3. HTTP POST /api/get-analysis)           |
+         |                                            |
+         +--------------------+                       |
+                              |                       |
+         | (4. HTTP POST /api/analyze-day-fallback)   |
          |                                            |
          +--------------------+                       |
                               |                       |
@@ -167,39 +182,30 @@ Strategia di caching a due livelli:
 |                                                                              |
 |  +----------------------------+      +------------------------------------+  |
 |  |   /api/forecast Logic      |----->|  API METEO                         |  |
-|  |                            |      |  - Open-Meteo                      |  |
+|  | (2. Innesca analisi in BG) |      |  - Open-Meteo                      |  |
 |  |                            |      |  - WWO                             |  |
 |  |                            |      |  - Stormglass                      |  |
-|  +----------------------------+      +------------------------------------+  |
+|  +--------------+-------------+      +-----------------+------------------+  |
+|                 |                                      |                     |
+|                 | (async)                              V                     |
+|                 |                              +---------------+             |
+|                 |                              |   myCache     |             |
+|                 |                              +---------------+             |
+|                 V                                                            |
+|  +-----------------------------+     +-----------------+     +-------------+ |
+|  | proactive_analysis.service  |---->|   RAG Flow      |---->|analysisCache| |
+|  | (Esegue RAG e popola cache) |     | (Usa Gemini)    |     +-------------+ |
+|  +-----------------------------+     +-----------------+                     |
 |                                                                              |
 |                                                                              |
-|  +----------------------------------------------------------------------+    |
-|  |   /api/analyze-day Logic (RAG)                                       |    |
-|  |                                                                      |    |
-|  |   Step 1: Chiama API Meteo                                           |    |
-|  |            |                                                         |    |
-|  |            V                                                         |    |
-|  |   +----------------------------------+                               |    |
-|  |   |  API METEO (Open-Meteo, WWO, etc)|                               |    |
-|  |   +----------------------------------+                               |    |
-|  |                                                                      |    |
-|  |   Step 2: Interroga DB Vettoriale                                    |    |
-|  |            |                                                         |    |
-|  |            V                                                         |    |
-|  |   +---------------------------+                                      |    |
-|  |   |  ChromaDB (in-memory)     |                                      |    |
-|  |   +---------------------------+                                      |    |
-|  |                                                                      |    |
-|  |   Step 3: Assembla Prompt                                            |    |
-|  |            |                                                         |    |
-|  |            V                                                         |    |
-|  |   Step 4: Chiama Gemini API                                          |    |
-|  |            |                                                         |    |
-|  |            V                                                         |    |
-|  |   +----------------------------------+                               |    |
-|  |   |  GOOGLE AI PLATFORM (Gemini)     |                               |    |
-|  |   +----------------------------------+                               |    |
-|  +----------------------------------------------------------------------+    |
+|  +-----------------------------+                                             |
+|  |   /api/get-analysis Logic   |----------------------> Legge analysisCache  |
+|  +-----------------------------+                                             |
+|                                                                              |
+|  +-----------------------------+                                             |
+|  |   /api/analyze-day-fallback |------> Legge myCache -> Esegue RAG         |
+|  |          Logic              |        on-demand                            |
+|  +-----------------------------+                                             |
 |                                                                              |
 +==============================================================================+
                               ^
@@ -273,11 +279,12 @@ Strategia di caching a due livelli:
         - google_fonts: ^6.2.1
 
     ENDPOINT API PRINCIPALI:
-        - Forecast (Dati Grezzi): POST https://pesca-api.onrender.com/api/forecast (body: lat, lon)
-        - Analysis (RAG):       POST https://pesca-api.onrender.com/api/analyze-day (body: lat, lon)
-        - Cache Update:         GET https://pesca-api.onrender.com/api/update-cache (query: secret)
-        - Autocomplete:         GET https://pesca-api.onrender.com/api/autocomplete?q={}
-        - Reverse Geocode:      GET https://pesca-api.onrender.com/api/reverse-geocode?lat={}&lon={}
+		- Forecast (Dati + Trigger AI): GET https://pesca-api.onrender.com/api/forecast?location={}
+		- Analysis (Cache Check):   POST https://pesca-api.onrender.com/api/get-analysis (body: lat, lon)
+		- Analysis (Fallback):      POST https://pesca-api.onrender.com/api/analyze-day-fallback (body: lat, lon)
+		- Cache Update:             GET https://pesca-api.onrender.com/api/update-cache (query: secret)
+		- Autocomplete:             GET https://pesca-api.onrender.com/api/autocomplete?q={}
+		- Reverse Geocode:          GET https://pesca-api.onrender.com/api/reverse-geocode?lat={}&lon={}
 
     LOCALITA DI TEST:
         - Posillipo (Premium + Corrente): 40.7957, 14.1889
@@ -552,113 +559,114 @@ Strategia di caching a due livelli:
 La seguente è una rappresentazione commentata della struttura attuale del progetto frontend:
 
 ```
-|-- .dart_tool/ # Cache e file interni generati dagli strumenti di sviluppo Dart.
-|-- |   dartpad/
-|-- |   extension_discovery/
-|-- |   flutter_build/
-|-- |   package_config.json
-|-- |   package_graph.json
-|-- |   version
-|-- .idea/ # File di configurazione specifici dell'IDE.
-|-- |   libraries/
-|-- |   runConfigurations/
-|-- |   modules.xml
-|-- |   workspace.xml
-|-- android/ # Wrapper nativo Android; contiene il codice sorgente per l'app Android.
-|-- |   .gradle/
-|-- |   .kotlin/
-|-- |   app/
-|-- |   gradle/
-|-- |   .gitignore
-|-- |   build.gradle.kts
-|-- |   gradle.properties
-|-- |   gradlew
-|-- |   gradlew.bat
-|-- |   hs_err_pid29300.log
-|-- |   hs_err_pid9352.log
-|-- |   local.properties
-|-- |   pesca_app_android.iml
-|-- |   settings.gradle.kts
+| -- .dart_tool/ # Cache e file interni generati dagli strumenti di sviluppo Dart.
+| | --  dartpad/
+| | --  extension_discovery/
+| | --  flutter_build/
+| | --  package_config.json
+| | --  package_graph.json
+| | --  version
+| -- .idea/ # File di configurazione specifici dell'IDE.
+| | --  libraries/
+| | --  runConfigurations/
+| | --  modules.xml
+| | --  workspace.xml
+| -- android/ # Wrapper nativo Android; contiene il codice sorgente per l'app Android.
+| | --  .gradle/
+| | --  .kotlin/
+| | --  app/
+| | --  gradle/
+| | --  .gitignore
+| | --  build.gradle.kts
+| | --  gradle.properties
+| | --  gradlew
+| | --  gradlew.bat
+| | --  hs_err_pid29300.log
+| | -- hs_err_pid9352.log
+| | -- local.properties
+| | --  pesca_app_android.iml
+| | --  settings.gradle.kts
 |-- assets/ # Risorse statiche come immagini e font.
-|-- |   fonts/
-|-- |   background.jpg
-|-- |   background_daily.jpg
-|-- |   background_nocturnal.jpg
-|-- |   background_rainy.jpg
-|-- |   background_sunset.jpg
+| | --  fonts/
+| | --  background.jpg
+| | --  background_daily.jpg
+| | --  background_nocturnal.jpg
+| | --  background_rainy.jpg
+| | --  background_sunset.jpg
 |-- build/ # Cartella di output per gli artefatti di compilazione.
-|-- |   .cxx/
-|-- |   4c4cf07c114c4d28ec539ca98bbb1c2c/
-|-- |   app/
-|-- |   app_settings/
-|-- |   geolocator_android/
-|-- |   light/
-|-- |   native_assets/
-|-- |   package_info_plus/
-|-- |   path_provider_android/
-|-- |   reports/
-|-- |   shared_preferences_android/
-|-- |   sqflite_android/
-|-- |   b9dbe592fc2ae558329e0a126bb30b5a.cache.dill.track.dill
+| | --  .cxx/
+| | --  4c4cf07c114c4d28ec539ca98bbb1c2c/
+| | --  app/
+| | --  app_settings/
+| | -- geolocator_android/
+| | --  light/
+| | --  native_assets/
+| | --  package_info_plus/
+| | --  path_provider_android/
+| | --  reports/
+| | --  shared_preferences_android/
+| | --  sqflite_android/
+| | --  b9dbe592fc2ae558329e0a126bb30b5a.cache.dill.track.dill
 |-- ios/ # Wrapper nativo iOS; contiene il progetto Xcode per l'app iOS.
-|-- |   Flutter/
-|-- |   Runner/
-|-- |   Runner.xcodeproj/
-|-- |   Runner.xcworkspace/
-|-- |   RunnerTests/
-|-- |   .gitignore
+| | --  Flutter/
+| | --  Runner/
+| | --  Runner.xcodeproj/
+| | --  Runner.xcworkspace/
+| | -- RunnerTests/
+| | --  .gitignore
 |-- lib/ # Cuore dell'applicazione. Contiene tutto il codice sorgente Dart.
-|-- |   models/ # Definisce le strutture dati (POJO/PODO).
-|-- |   |   forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca. E' il contratto tra FE e BE.
-|-- |   screens/ # Componenti di primo livello che rappresentano un'intera schermata.
-|-- |   |   forecast_screen.dart # Lo "Stato Centrale" della UI. E' uno StatefulWidget complesso che gestisce lo stato globale della schermata (dati meteo, pagina corrente) e orchestra effetti a livello di app come il "Modal Focus" (sfocatura globale) quando la AnalystCard e' attiva.
-|-- |   services/ # Moduli dedicati alle interazioni con sistemi esterni (backend, GPS).
-|-- |   |   api_service.dart # Il "Data Layer". Centralizza TUTTE le chiamate HTTP al backend. Gestisce la logica di timeout, il parsing dei JSON e il mapping degli errori. Include i metodi fetchForecastData() e il nuovo fetchAnalysis() per la feature RAG.
-|-- |   utils/ # Funzioni helper pure, stateless e riutilizzabili.
-|-- |   |   weather_icon_mapper.dart # Traduttore di codici meteo (WMO, WWO) in IconData e Color, garantendo consistenza visiva.
-|-- |   widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
-|-- |   |   analyst_card.dart # [CHIAVE-RAG] Il componente piu' avanzato. E' uno StatefulWidget che gestisce la visualizzazione della risposta Markdown dall'IA. Implementa Motion Design (animazioni "stagger") e Tipografia Avanzata con uno StyleSheet custom, applicando la palette calda "Premium Plus".
-|-- |   |   fishing_score_indicator.dart # Dataviz specializzato. Visualizza il pescaScore aggregato tramite un set di icone-amo stilizzate, indicando a colpo d'occhio il potenziale di pesca.
-|-- |   |   glassmorphism_card.dart # Il "pilastro" del nostro Design System di Profondita'. Widget riutilizzabile che crea un pannello con effetto vetro smerigliato (BackdropFilter), fondamentale per la gerarchia visiva.
-|-- |   |   hourly_forecast.dart # Widget tabellare ad alta densita' di informazioni. Mostra le previsioni ora per ora con logica di "Heatmap" dinamica (colori caldi/freddi) per vento, onde e umidita', e animazioni a cascata.
-|-- |   |   location_services_dialog.dart # Gestore di permessi. Dialogo standardizzato per guidare l'utente nell'attivazione dei servizi di localizzazione quando sono disabilitati.
-|-- |   |   main_hero_module.dart # Il "biglietto da visita" della schermata. E' il componente principale che mostra i dati salienti (localita', temperatura) e funge da "host" per il trigger della feature AI (l'icona _PulsingIcon), gestendo l'attivazione dell'overlay "Modal Focus".
-|-- |   |   score_chart_dialog.dart # Dataviz interattivo. Mostra un dialogo modale con un grafico a linee (fl_chart) per l'andamento orario del pescaScore.
-|-- |   |   score_details_dialog.dart # Spiegazione del "perche'". Dialogo che mostra i fattori positivi/negativi (`reasons`) che hanno contribuito a un determinato punteggio orario.
-|-- |   |   search_overlay.dart # Motore di ricerca UI. Un layer sovrapposto che gestisce la ricerca di localita' tramite autocomplete e l'accesso rapido al GPS.
-|-- |   |   stale_data_dialog.dart # Gestore di fallback. Dialogo che avvisa l'utente quando l'app sta usando dati in cache obsoleti a causa di un errore di rete, offrendo una scelta.
-|-- |   |   weekly_forecast.dart # Dataviz settimanale. Lista che mostra le previsioni aggregate per i giorni successivi, inclusi min/max di temperatura e il pescaScore medio giornaliero.
-|-- |   main.dart # Il punto di ingresso. Inizializza l'app, imposta eventuali provider/servizi globali (come il Theme) e avvia la ForecastScreen.
+| | -- models/ # Definisce le strutture dati (POJO/PODO).
+| | | --forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca. Include il metodo toJson() per la serializzazione. E' il contratto tra FE e BE.
+| | -- screens/ # Componenti di primo livello che rappresentano un'intera schermata.
+| | | -- forecast_screen.dart # Lo "Stato Centrale" della UI. E' uno StatefulWidget complesso che gestisce lo stato globale della schermata (dati meteo, pagina corrente) e orchestra effetti a livello di app come il "Modal Focus" (sfocatura globale) quando la AnalystCard e' attiva.
+| | -- services/ # Moduli dedicati alle interazioni con sistemi esterni (backend, GPS).
+| | | -- api_service.dart # Il "Data Layer". Centralizza TUTTE le chiamate HTTP al backend. Implementa l'architettura P.H.A.N.T.O.M. a due fasi per l'analisi AI: prima una chiamata istantanea alla cache (/get-analysis), poi un fallback ottimizzato on-demand (/analyze-day-fallback).
+| | -- utils/ # Funzioni helper pure, stateless e riutilizzabili.
+| | | -- weather_icon_mapper.dart # Traduttore di codici meteo (WMO, WWO) e stringhe in IconData e Color, garantendo consistenza visiva.
+| | -- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
+| | | -- analyst_card.dart # [CHIAVE-AI] Widget stateful che orchestra la visualizzazione dell'analisi. Gestisce gli stati (caricamento, successo, errore) e decide se mostrare lo Skeleton Loader (per il fallback) o il contenuto Markdown ricevuto istantaneamente.
+| | | -- analysis_skeleton_loader.dart # [CHIAVE-UX] Componente "Premium Plus" che mostra un placeholder animato (effetto "shimmer") durante l'attesa dell'analisi di fallback, migliorando la percezione della performance.
+| | | -- fishing_score_indicator.dart # Dataviz specializzato. Visualizza il pescaScore aggregato tramite un set di icone-amo stilizzate, indicando a colpo d'occhio il potenziale di pesca.
+| | | -- glassmorphism_card.dart # Il "pilastro" del nostro Design System di Profondita'. Widget riutilizzabile che crea un pannello con effetto vetro smerigliato (BackdropFilter), fondamentale per la gerarchia visiva.
+| | | -- hourly_forecast.dart # Widget tabellare ad alta densita' di informazioni. Mostra le previsioni ora per ora con logica di "Heatmap" dinamica (colori caldi/freddi) per vento, onde e umidita', e animazioni a cascata.
+| | | -- location_services_dialog.dart # Gestore di permessi. Dialogo standardizzato per guidare l'utente nell'attivazione dei servizi di localizzazione quando sono disabilitati.
+| | | -- main_hero_module.dart # Il "biglietto da visita" della schermata. E' il componente principale che mostra i dati salienti (localita', temperatura) e funge da "host" per il trigger della feature AI (l'icona _PulsingIcon), gestendo l'attivazione dell'overlay "Modal Focus".
+| | | -- score_chart_dialog.dart # Dataviz interattivo. Mostra un dialogo modale con un grafico a linee (fl_chart) per l'andamento orario del pescaScore.
+| | | -- score_details_dialog.dart # Spiegazione del "perche'". Dialogo che mostra i fattori positivi/negativi (reasons) che hanno contribuito a un determinato punteggio orario.
+| | | -- search_overlay.dart # Motore di ricerca UI. Un layer sovrapposto che gestisce la ricerca di localita' tramite autocomplete e l'accesso rapido al GPS.
+| | | -- stale_data_dialog.dart # Gestore di fallback. Dialogo che avvisa l'utente quando l'app sta usando dati in cache obsoleti a causa di un errore di rete, offrendo una scelta.
+| | | -- weekly_forecast.dart # Dataviz settimanale. Lista che mostra le previsioni aggregate per i giorni successivi, inclusi min/max di temperatura e il pescaScore medio giornaliero.
+| | -- main.dart # Il punto di ingresso. Inizializza l'app, imposta eventuali provider/servizi globali (come il Theme) e avvia la ForecastScreen.
 |-- linux/ # Wrapper nativo Linux.
-|-- |   flutter/
-|-- |   runner/
-|-- |   .gitignore
-|-- |   CMakeLists.txt
+| | -- flutter/
+| | -- runner/
+| | -- .gitignore
+| | -- CMakeLists.txt
 |-- macos/ # Wrapper nativo macOS.
-|-- |   Flutter/
-|-- |   Runner/
-|-- |   Runner.xcodeproj/
-|-- |   Runner.xcworkspace/
-|-- |   RunnerTests/
-|-- |   .gitignore
+| | -- Flutter/
+| | -- Runner/
+| | -- Runner.xcodeproj/
+| | -- Runner.xcworkspace/
+| | -- RunnerTests/
+| | -- .gitignore
 |-- node_modules/ # Sottocartella.
-|-- |   .bin/
-|-- |   chromadb/
-|-- |   chromadb-js-bindings-win32-x64-msvc/
-|-- |   semver/
-|-- |   .package-lock.json
-|-- test/ # Contiene i file per i test automatici.
-|-- |   widget_test.dart
+| | -- .bin/
+| | -- chromadb/
+| | -- chromadb-js-bindings-win32-x64-msvc/
+| | -- semver/
+| | -- .package-lock.json
+| test/ # Contiene i file per i test automatici.
+|-- | -- widget_test.dart
 |-- web/ # Codice sorgente per la versione web.
-|-- |   icons/
-|-- |   favicon.png
-|-- |   index.html
-|-- |   manifest.json
+| | -- icons/
+| | -- favicon.png
+| | -- index.html
+| | -- manifest.json
 |-- windows/ # Wrapper nativo Windows.
-|-- |   flutter/
-|-- |   runner/
-|-- |   .gitignore
-|-- |   CMakeLists.txt
+| | -- flutter/
+| | -- runner/
+| | -- .gitignore
+| | -- CMakeLists.txt
 |-- .flutter-plugins-dependencies # File di tipo '.flutter-plugins-dependencies'.
 |-- .gitignore # Specifica i file da ignorare nel controllo di versione.
 |-- .metadata # File generato da Flutter per tracciare le proprietà del progetto.
@@ -681,23 +689,24 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |-- api/ # Contiene i file che definiscono le route e la logica API.
 |   |-- autocomplete.js # Modulo che esporta funzionalità o dati.
 |   |-- reverse-geocode.js # Modulo che esporta funzionalità o dati.
-|-- lib/ # Contiene tutta la logica di business e i moduli core dell'applicazione.
-|   |-- domain/ # Contiene la logica di business pura, slegata da API e framework.
-|   |   |-- knowledge_base.js # La "libreria" statica. Definisce i documenti di testo grezzi sulla pesca che verranno usati per popolare il database vettoriale. Non contiene logica, solo dati.
-|   |   |-- score.calculator.js # Il "Calcolatore". Contiene la funzione pura `calculateHourlyPescaScore`. La sua unica responsabilita' e' prendere dati meteo-marini e restituire un punteggio numerico e le ragioni.
-|   |   `-- window.calculator.js # L' "Ottimizzatore". Contiene la funzione pura `findBestTimeWindow`. La sua unica responsabilita' e' analizzare una serie di punteggi e trovare le fasce orarie migliori.
-|   |-- services/ # "Ambasciatori" verso il mondo esterno. Ogni file gestisce la comunicazione con una singola API.
-|   |   |-- gemini.service.js # Interfaccia con Google AI. Espone `generateAnalysis` (per creare testo) e la logica di embedding per il seeder.
-|   |   |-- openmeteo.service.js # Specialista di Open-Meteo. Contiene la funzione `fetchOpenMeteoHourly` che recupera i dati orari ad alta risoluzione.
-|   |   |-- stormglass.service.js # Specialista di Stormglass. Contiene la funzione `fetchStormglassData` che recupera i dati marini premium (corrente).
-|   |   |-- vector.service.js # Il "Bibliotecario Intelligente". Incapsula la logica di ricerca nel database vettoriale. Espone `queryKnowledgeBase` per trovare i "fatti" piu' pertinenti.
-|   |   `-- wwo.service.js # Specialista di WorldWeatherOnline. Contiene la funzione `fetchWwoDaily` per recuperare dati base come astronomia e maree.
-|   |-- utils/ # La "cassetta degli attrezzi". Funzioni pure, piccole e riutilizzabili ovunque.
-|   |   |-- cache.manager.js # Gestore della Cache. Esporta l'istanza `myCache` e la logica di locking (`cacheLocks`) per un accesso centralizzato e sicuro.
-|   |   |-- formatter.js # Specialista di Formattazione. Contiene tutte le funzioni per la presentazione dei dati (es. `formatTimeToHHMM`, `capitalize`, `getSeaStateAcronym`).
-|   |   |-- geo.utils.js # Specialista Geospaziale. Contiene funzioni puramente matematiche/geografiche, come `areCoordsNear`.
-|   |   `-- wmo_code_converter.js # Specialista di Codici Meteo. Contiene `convertWmoToWwoCode`, `getWeatherDescription`, e `degreesTo16PointDirection`.
-|   `-- forecast-logic.js # IL DIRETTORE D'ORCHESTRA. E' l'unico file con logica complessa di coordinamento. La sua funzione master `getUnifiedForecastData` NON contiene piu' la logica di business o di fetching, ma si limita a: 1. Gestire la cache. 2. Chiamare i vari `services` per ottenere i dati grezzi. 3. Assemblare i dati. 4. Chiamare i `domain` calculators per arricchire i dati con `pescaScore` e finestre. 5. Restituire il payload finale.
+-- lib/ # Contiene tutta la logica di business e i moduli core dell'applicazione.
+| |-- domain/ # Contiene la logica di business pura, slegata da API e framework.
+| | |-- knowledge_base.js # La "libreria" statica. Definisce i documenti di testo grezzi sulla pesca che verranno usati per popolare il database vettoriale. Non contiene logica, solo dati.
+| | |-- score.calculator.js # Il "Calcolatore". Contiene la funzione pura calculateHourlyPescaScore. La sua unica responsabilita' e' prendere dati meteo-marini e restituire un punteggio numerico e le ragioni.
+| | -- window.calculator.js # L' "Ottimizzatore". Contiene la funzione pura findBestTimeWindow. La sua unica responsabilita' e' analizzare una serie di punteggi e trovare le fasce orarie migliori. 
+| |-- services/ # "Ambasciatori" verso il mondo esterno. Ogni file gestisce la comunicazione con una singola API. 
+| | |-- gemini.service.js # Interfaccia con Google AI. Espone generateAnalysis(per creare testo) e la logica di embedding per il seeder. 
+| | |-- openmeteo.service.js # Specialista di Open-Meteo. Contiene la funzionefetchOpenMeteoHourlyche recupera i dati orari ad alta risoluzione. 
+| | |-- proactive_analysis.service.js # [CHIAVE-PHANTOM] Il motore dell'analisi proattiva. Contiene la logica per eseguire un'analisi RAG completa in background e salvarla nellaanalysisCache. 
+| | |-- stormglass.service.js # Specialista di Stormglass. Contiene la funzione fetchStormglassDatache recupera i dati marini premium (corrente). 
+| | |-- vector.service.js # Il "Bibliotecario Intelligente". Incapsula la logica di ricerca nel database vettoriale. EsponequeryKnowledgeBaseper trovare i "fatti" piu' pertinenti. 
+| | -- wwo.service.js # Specialista di WorldWeatherOnline. Contiene la funzione fetchWwoDaily per recuperare dati base come astronomia e maree.
+| |-- utils/ # La "cassetta degli attrezzi". Funzioni pure, piccole e riutilizzabili ovunque.
+| | |-- cache.manager.js # Gestore della Cache. Esporta due istanze separate: myCache per i dati meteo e analysisCache per le analisi AI, garantendo strategie di caching indipendenti.
+| | |-- formatter.js # Specialista di Formattazione. Contiene tutte le funzioni per la presentazione dei dati (es. formatTimeToHHMM, capitalize, getSeaStateAcronym).
+| | |-- geo.utils.js # Specialista Geospaziale. Contiene funzioni puramente matematiche/geografiche, come areCoordsNear.
+| | -- wmo_code_converter.js # Specialista di Codici Meteo. Contiene convertWmoToWwoCode, getWeatherDescription, e degreesTo16PointDirection. 
+| -- forecast-logic.js # IL DIRETTORE D'ORCHESTRA. La sua funzione master getUnifiedForecastData orchestra il recupero dei dati meteo, gestisce la myCache e, crucialmente, innesca l'analisi proattiva in background tramite proactive_analysis.service.js dopo ogni aggiornamento.
 |-- public/ # Contiene file statici serviti al client.
 |   |-- fish_icon.png # File di tipo '.png'.
 |   |-- half_moon.png # File di tipo '.png'.
