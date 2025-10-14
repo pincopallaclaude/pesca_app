@@ -231,35 +231,53 @@ class ApiService {
     if (lat == null || lon == null)
       throw const ApiException("Invalid coordinates.");
 
-    // --- STAGE 1: Chiamata all'endpoint a latenza zero ---
-    print('[ApiService-Phantom] Stage 1: Calling /get-analysis...');
-    try {
-      final primaryUri = Uri.parse('$_baseUrl/get-analysis');
-      final primaryResponse = await http
-          .post(
-            primaryUri,
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'lat': lat, 'lon': lon}),
-          )
-          .timeout(const Duration(seconds: 5));
+    // --- STAGE 1: Chiamata all'endpoint a latenza zero con logica di retry ---
+    const int maxRetries = 2; // Faremo 1 tentativo + 1 riprova
+    for (int i = 0; i < maxRetries; i++) {
+      print(
+          '[ApiService-Phantom] Stage 1: Calling /get-analysis (Attempt ${i + 1})...');
+      try {
+        final primaryUri = Uri.parse('$_baseUrl/get-analysis');
+        final primaryResponse = await http
+            .post(
+              primaryUri,
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({'lat': lat, 'lon': lon}),
+            )
+            .timeout(const Duration(
+                seconds: 10)); // Aumentiamo leggermente per il "wake-up"
 
-      // 202 significa 'pending', qualsiasi altro codice viene gestito
-      if (primaryResponse.statusCode == 200) {
         final primaryData =
             json.decode(primaryResponse.body) as Map<String, dynamic>;
-        // PARSING CORRETTO: Controlla 'status: success' e estrae da 'data'
-        if (primaryData['status'] == 'success' &&
-            primaryData['data'] is String) {
+
+        if (primaryResponse.statusCode == 200 &&
+            primaryData['status'] == 'success') {
           print('[ApiService-Phantom] ✅ Cache HIT. Analysis ready.');
           return primaryData['data'] as String;
         }
+
+        print(
+            '[ApiService-Phantom] ⏳ Response was not "success". Proceeding to fallback.');
+        break; // Esce dal ciclo di retry se la risposta è valida ma 'pending'
+      } on FormatException catch (e) {
+        print(
+            '[ApiService-Phantom] ⚠️ FormatException (likely server wake-up): $e.');
+        if (i < maxRetries - 1) {
+          print('[ApiService-Phantom] Retrying after a short delay...');
+          await Future.delayed(const Duration(
+              seconds: 2)); // Attendi 2 secondi prima di riprovare
+        } else {
+          print(
+              '[ApiService-Phantom] Max retries reached. Proceeding to fallback.');
+        }
+      } catch (e) {
+        print(
+            '[ApiService-Phantom] ⚠️ Error on /get-analysis: $e. Proceeding to fallback.');
+        break; // Esce dal ciclo in caso di altri errori (es. timeout)
       }
-    } catch (e) {
-      print(
-          '[ApiService-Phantom] ⚠️ Error or Timeout on /get-analysis. Proceeding to fallback.');
     }
 
-    // --- STAGE 2: Chiamata all'endpoint di fallback (on-demand) ---
+    // --- STAGE 2: Chiamata all'endpoint di fallback (eseguita SOLO se lo Stage 1 fallisce o è 'pending') ---
     print('[ApiService-Phantom] Stage 2: Calling /analyze-day-fallback...');
     final fallbackUri = Uri.parse('$_baseUrl/analyze-day-fallback');
 

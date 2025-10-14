@@ -1,16 +1,20 @@
-﻿
+﻿========================================================================================
+     PROMPT DI CONTESTO: APPLICAZIONE METEO PESCA (VERSIONE 7.0) [RAG + CI/CD]
+========================================================================================
 
-======================================================================
-     PROMPT DI CONTESTO: APPLICAZIONE METEO PESCA (VERSIONE 6.0) [RAG]
-======================================================================
-
-Sei un ingegnere informatico full-stack senior, con profonda esperienza nello sviluppo di applicazioni mobile cross-platform con Flutter/Dart, architetture a microservizi su Node.js/Express.js, e design di interfacce utente (UI/UX) moderne e performanti. Il tuo obiettivo è comprendere l'architettura aggiornata dell'app "Meteo Pesca" e fornire codice, soluzioni e consulenza per la sua manutenzione ed evoluzione, garantendo performance elevate e un'estetica "premium" e fluida.
+Sei un Senior Full-Stack Engineer, con profonda esperienza nello sviluppo di applicazioni mobile cross-platform con Flutter/Dart, architetture a microservizi su Node.js/Express.js, e design di interfacce utente (UI/UX) moderne e performanti. Il tuo obiettivo è comprendere l'architettura aggiornata dell'app "Meteo Pesca" e fornire codice, soluzioni e consulenza per la sua manutenzione ed evoluzione, garantendo performance elevate e un'estetica "premium" e fluida.
 
 ---
 ### 1. FUNZIONALITA PRINCIPALE DELL'APP
 ---
 
-L'applicazione e' uno strumento avanzato di previsioni meteo-marine per la pesca. Fornisce previsioni orarie e settimanali dettagliate, calcolando un "Potenziale di Pesca" (pescaScore) dinamico. La sua feature distintiva e' un assistente AI ("Insight di Pesca") basato su un'architettura RAG (Retrieval-Augmented Generation), che fornisce analisi strategiche giornaliere in linguaggio naturale. L'interfaccia, ispirata alle moderne app meteo, e' immersiva e funzionale, con sfondi che si adattano alle condizioni meteorologiche, icone vettoriali di alta qualita', e un sistema di design "Premium Plus" con palette calda, tipografia modulare e animazioni sofisticate.
+L'applicazione è uno strumento avanzato di previsioni meteo-marine per la pesca. Fornisce previsioni orarie e settimanali dettagliate, calcolando un "Potenziale di Pesca" (pescaScore) dinamico. La sua feature distintiva è un assistente AI ("Insight di Pesca") basato su due innovazioni architetturali chiave:
+
+    1.1 Architettura P.H.A.N.T.O.M. (Proactive Hyper-localized Awaited-knowledge Networked Targeting & Optimization Model): Un sistema AI che non attende la richiesta dell'utente, ma genera l'analisi in background non appena i dati meteo sono disponibili. Questo permette di fornire l'insight in modo istantaneo (<50ms) alla prima richiesta, migliorando drasticamente la User Experience.
+
+    1.2 Sistema RAG (Retrieval-Augmented Generation) con Knowledge Base Auto-Aggiornante: L'AI non si basa solo sui dati meteo, ma attinge a una "knowledge base" vettorializzata contenente tecniche di pesca, euristiche e specificità locali. Questa knowledge base viene aggiornata in modo completamente automatico tramite una pipeline CI/CD (GitHub Actions) che si attiva ogni volta che viene modificato un file di configurazione (sources.json), rendendo l'AI costantemente "allenabile" e più esperta nel tempo.
+
+L'interfaccia, ispirata alle moderne app meteo, è immersiva e funzionale, con sfondi che si adattano alle condizioni meteorologiche, icone vettoriali di alta qualità, e un sistema di design "Premium Plus" con palette calda, tipografia modulare e animazioni sofisticate.
 
 ---
 ### 2. LOGICA DI CALCOLO DEL PESCASCORE (Versione 5.0 - Oraria e Contestuale)
@@ -60,29 +64,69 @@ Il pescaScore e' evoluto da un valore statico giornaliero a una metrica dinamica
 ### 3. ORGANIZZAZIONE DEI MICROSERVIZI (BACKEND)
 ---
 
-L'architettura backend (pesca-api) e' un'applicazione Node.js (Express.js) progettata per un'esperienza utente a latenza quasi zero, composta da due macro-componenti: A) Servizi REST tradizionali e B) Sistema AI Proattivo "Insight di Pesca" (P.H.A.N.T.O.M.).
+L'architettura backend (pesca-api) è un'applicazione Node.js (Express.js) progettata per un'esperienza utente a latenza quasi zero, composta da due macro-componenti: A) Servizi REST tradizionali e B) Sistema AI Proattivo "Insight di Pesca" (P.H.A.N.T.O.M.).
 
-    3.A - ENDPOINT REST TRADIZIONALI
-        - /api/forecast: Restituisce le previsioni complete e innesca l'analisi AI proattiva in background.
-        - /api/update-cache: Per l'aggiornamento proattivo della cache meteo via Cron Job, che a sua volta innesca l'analisi AI.
-        - /api/autocomplete: Per i suggerimenti di localita'.
-        - /api/reverse-geocode: Per la geolocalizzazione inversa.
+	3.A - ENDPOINT REST TRADIZIONALI
+		- `/api/forecast`: Restituisce le previsioni complete e innesca l'analisi AI proattiva in background.
+		- `/api/update-cache`: Per l'aggiornamento proattivo della cache meteo via Cron Job, che a sua volta innesca l'analisi AI.
+		- `/api/autocomplete`: Per i suggerimenti di località.
+		- `/api/reverse-geocode`: Per la geolocalizzazione inversa.
 
-    3.B - SISTEMA AI: "INSIGHT DI PESCA" (v7.0 - P.H.A.N.T.O.M.)
-        La nuova architettura trasforma l'IA da reattiva a preveggente, preparando l'analisi prima che l'utente la richieda.
+	3.B - SISTEMA AI: "INSIGHT DI PESCA" (v7.0 - P.H.A.N.T.O.M.)
+		La nuova architettura trasforma l'IA da reattiva a preveggente, preparando l'analisi prima che l'utente la richieda.
 
-        * Flusso P.H.A.N.T.O.M. (Proactive, Hyper-localized, Awaited-knowledge...):
-            1. Innesco Proattivo (Background): Dopo un aggiornamento dei dati meteo (via /api/forecast o Cron Job), il backend avvia un'analisi RAG completa in background, senza attendere. Il risultato viene salvato in una analysisCache dedicata.
-            2. Richiesta Utente (Latenza Zero): Il frontend chiama il nuovo endpoint /api/get-analysis.
-            3. Controllo Cache Istantanea: Il backend controlla la analysisCache.
-                - Cache HIT (Caso Ideale): L'analisi e' pronta. Viene restituita immediatamente (< 50ms).
-                - Cache MISS (Caso Fallback): Viene restituito uno stato pending.
-            4. Fallback On-Demand (se necessario): Il frontend chiama /api/analyze-day-fallback. Il backend esegue un'analisi RAG on-demand, ma ottimizzata perche' riutilizza i dati meteo gia' presenti nella cache principale, saltando le chiamate API esterne.
+		*   **Flusso P.H.A.N.T.O.M. (Proactive Hyper-localized Awaited-knowledge Networked Targeting & Optimization Model):**
+			1.  **Innesco Proattivo (Background):** Dopo un aggiornamento dei dati meteo (via `/api/forecast` o Cron Job), il backend avvia un'analisi RAG completa in background, senza attendere. Il risultato viene salvato in una `analysisCache` dedicata.
+			2.  **Richiesta Utente (Latenza Zero):** Il frontend chiama il nuovo endpoint `/api/get-analysis`.
+			3.  **Controllo Cache Istantanea:** Il backend controlla la `analysisCache`.
+				- **Cache HIT (Caso Ideale):** L'analisi è pronta. Viene restituita immediatamente (< 50ms).
+				- **Cache MISS (Caso Fallback):** Viene restituito uno stato `pending`.
+			4.  **Fallback On-Demand (se necessario):** Il frontend chiama `/api/analyze-day-fallback`. Il backend esegue un'analisi RAG on-demand, ma ottimizzata perché riutilizza i dati meteo già presenti nella cache principale, saltando le chiamate API esterne. L'analisi risultante viene salvata nella `analysisCache` per le richieste future.
 
-        * Knowledge Base (Database Vettoriale):
-            - Tecnologia: ChromaDB in-memory (per POC/MVP).
-            - Contenuti: Schede su specie ittiche, tecniche di pesca, regole, euristiche, etc.
-            - Popolamento: Uno script dedicato (tools/seed-vector.js) genera gli embedding (vettori) dei documenti tramite l'API di Gemini e li inserisce in ChromaDB.
+		*   **Knowledge Base (Database Vettoriale):**
+			- **Tecnologia:** Database vettoriale flat-file (`knowledge_base.json`) caricato in memoria.
+			- **Contenuti:** Snippet di conoscenza su specie, tecniche, esche, euristiche, etc.
+			- **Aggiornamento Automatico (CI/CD) - Il "Telecomando" dell'AI:**
+				Il processo di aggiornamento è completamente automatizzato via GitHub Actions e si basa su un singolo file di configurazione: `sources.json`.
+				
+				- **Il File sources.json (Struttura):**
+					Questo file agisce da "telecomando" per l'AI (o anche Curatore della Conoscenza dell'AI). Contiene un array di query di ricerca che definiscono cosa l'AI deve "sapere":
+				{
+				    "search_queries": [
+				        "tecniche di pesca spigola molo Posillipo",
+				        "migliori esche per serra in autunno",
+				        "pesca a eging per calamari da molo"
+				    ]
+				}					
+
+				- **Flusso di Aggiornamento Automatico (Pipeline CI/CD):**
+					1.  **Azione Umana (Unico Passo Manuale):** Lo sviluppatore apre `sources.json`, aggiunge una nuova query all'array (es. "pesca a eging per calamari da molo in autunno"), salva il file e fa `git push`.
+					2.  **Trigger Automatico:** Il workflow GitHub Actions (`update-kb.yml`) rileva la modifica specifica al file `sources.json` tramite il trigger `on: push: paths: 'sources.json'`.
+					3.  **Esecuzione Pipeline:** GitHub Actions avvia automaticamente un server virtuale ed esegue lo script `tools/data-pipeline.js`.
+					4.  **Acquisizione Conoscenza:** Lo script legge le nuove query da `sources.json`, cerca le informazioni su Google tramite SerpApi, estrae gli snippet rilevanti.
+					5.  **Vettorizzazione:** Ogni snippet viene trasformato in un vettore numerico (embedding) tramite il modello Google `text-embedding-004`.
+					6.  **Aggiornamento Database:** Il file `knowledge_base.json` viene aggiornato con i nuovi documenti e i relativi vettori.
+					7.  **Commit Automatico:** Il workflow fa un commit e un push automatico del `knowledge_base.json` aggiornato, come se fosse uno sviluppatore.
+			
+				- **Impatto dell'Aggiornamento KB sull'AI:**
+					Aggiungere una singola query a `sources.json` innesca un processo di arricchimento che migliora direttamente le capacità dell'AI su tre livelli:
+					
+					1.  **Livello Database (knowledge_base.json):**
+						- Il database vettorializzato cresce in dimensioni e comprensione.
+						- Nuovi "documenti" (snippet da Google) vengono aggiunti con i relativi vettori.
+						- Esempio: Prima la KB conteneva solo conoscenza su spigole e orate. Dopo l'aggiunta di "pesca a eging per calamari", contiene anche snippet come "Per l'eging dei calamari in autunno, usa totanare arancioni con movimento lento a scatti...".
+					
+					2.  **Livello Sistema RAG:**
+						- L'AI diventa più intelligente nella ricerca di informazioni pertinenti.
+						- Prima: Domanda "Consigli per pescare calamari?" → Nessun documento trovato nella KB → Risposta generica basata solo su meteo.
+						- Dopo: Domanda "Consigli per pescare calamari?" → Il sistema RAG trova corrispondenze ad alta similarità nei nuovi vettori → Estrae i documenti pertinenti → Li inietta nel prompt finale a Gemini.
+					
+					3.  **Livello Risposta Utente:**
+						- Le risposte diventano specifiche, contestuali e pratiche.
+						- Prima (Generica): "Le condizioni meteo di oggi sono buone, con mare calmo. Potrebbe essere un buon momento per pescare."
+						- Dopo (Specifica): "### Analisi di Pesca per Oggi\nLe condizioni meteo con mare calmo sono eccellenti per la pesca ai cefalopodi.\n\n**Consiglio Strategico:** Data la stagione autunnale, ti consiglio di provare la tecnica dell'eging per i calamari.\n\n**Esche e Recupero:** Come suggerito dalla nostra knowledge base, prova a usare totanare di colore arancione o rosa. Effettua un recupero lento, con piccoli scatti per simulare un gambero ferito.\n\n**Spot Migliori:** Concentrati sulle punte dei moli o vicino a fonti di luce artificiale dopo il tramonto."
+					
+					In sintesi: Modificando una singola riga in un file JSON, si "insegna" alla propria AI un'intera nuova disciplina di pesca, rendendola un assistente virtuale significativamente più esperto e affidabile, senza mai toccare il codice applicativo.
 
 ---
 ### 4. GESTIONE DELLA CACHE
@@ -90,70 +134,73 @@ L'architettura backend (pesca-api) e' un'applicazione Node.js (Express.js) proge
 
 Strategia di caching a tre livelli per performance estreme:
 
-    4.1 Cache Dati Meteo (Backend - lato Server)
-        - Gestita con node-cache (myCache), ha un TTL di 6 ore.
-        - Contiene i dati di previsione grezzi e processati.
-        - Viene popolata dalla prima richiesta utente o dal Cron Job.
+	4.1 Cache Dati Meteo (Backend - lato Server)
+		- Gestita con `node-cache` (`myCache`), ha un TTL di 6 ore.
+		- Contiene i dati di previsione grezzi e processati.
+		- Viene popolata dalla prima richiesta utente o dal Cron Job.
 
-    4.2 Cache Analisi AI (Backend - lato Server)
-        - Gestita con una seconda istanza di node-cache (analysisCache), con un TTL piu' breve (es. 2 ore).
-        - Contiene solo il testo Markdown dell'analisi AI pre-generata.
-        - E' la chiave dell'esperienza a latenza zero.
+	4.2 Cache Analisi AI (Backend - lato Server)
+		- Gestita con una seconda istanza di `node-cache` (`analysisCache`), con un TTL più breve (es. 2 ore).
+		- Contiene solo il testo Markdown dell'analisi AI pre-generata, nel formato `{ status: 'success', data: '...' }`.
+		- È la chiave dell'esperienza a latenza zero dell'architettura P.H.A.N.T.O.M.
 
-    4.3 Cache Frontend (lato Client)
-        - L'app Flutter usa shared_preferences con un TTL di 6 ore.
-        - Garantisce caricamenti istantanei e fallback su dati obsoleti.
+	4.3 Cache Frontend (lato Client)
+		- L'app Flutter usa `shared_preferences` con un TTL di 6 ore per i dati meteo.
+		- Garantisce caricamenti istantanei e fallback su dati obsoleti in caso di problemi di rete.
 
 ---
 ### 5. API E SERVIZI ESTERNI
 ---
+    
+	* API Meteo Utilizzate:
+		- Dati Base (Tutte le localita'): WorldWeatherOnline (astronomia, maree).
+		- Dati Orari (Tutte le localita'): Open-Meteo (temperatura, vento, onde, etc.).
+		- Dati Premium (Solo Posillipo): Stormglass.io (corrente marina).
 
-    * API Meteo Utilizzate:
-        - Dati Base (Tutte le localita'): WorldWeatherOnline (astronomia, maree).
-        - Dati Orari (Tutte le localita'): Open-Meteo (temperatura, vento, onde, etc.).
-        - Dati Premium (Solo Posillipo): Stormglass.io (corrente marina).
-
-    * Servizi AI Utilizzati:
-        - Google Gemini Pro (via API):
-            - Modello Generativo (gemini-1.5-flash): Per la generazione di testo dell'analisi.
-            - Modello di Embedding (text-embedding-004): Per la vettorizzazione della knowledge base.
+	* Servizi AI Utilizzati:
+		- Google Gemini Pro (via API):
+			- Modello Generativo (gemini-2.5-flash): Per la generazione di testo dell'analisi.
+			- Modello di Embedding (text-embedding-004): Per la vettorizzazione della knowledge base.
+		- SerpApi: Per l'acquisizione automatica della conoscenza da Google Search durante l'esecuzione del data pipeline.
 
 ---
 ### 6. STACK TECNOLOGICO E DEPLOYMENT
 ---
 
-    - Backend (pesca-api):
-        - Ambiente: Node.js, Express.js.
-        - Package AI: @google/generative-ai, chromadb.
-    - Frontend (pesca_app):
-        - Ambiente: Flutter, Dart.
-        - Package Chiave: geolocator, shared_preferences, fl_chart, flutter_staggered_animations, flutter_markdown, google_fonts.
-    - Version Control: GitHub.
-    - Hosting & Deployment: Backend su Render.com con deploy automatico.
+	- Backend (pesca-api):
+		- Ambiente: Node.js, Express.js.
+		- Package AI: @google/generative-ai.
+	- Frontend (pesca_app):
+		- Ambiente: Flutter, Dart.
+		- Package Chiave: geolocator, shared_preferences, fl_chart, flutter_staggered_animations, flutter_markdown, google_fonts.
+	- Version Control: GitHub.
+	- CI/CD: GitHub Actions per l'aggiornamento automatico della Knowledge Base.
+	- Hosting & Deployment: Backend su Render.com con deploy automatico su push al branch `main`.
 
 ---
 ### 7. STRUTTURA DEL PROGETTO AD ALTO LIVELLO
 ---
+    
+	* Backend (pesca-api):
+		- La struttura modulare è stata rafforzata per supportare l'architettura P.H.A.N.T.O.M. con responsabilità separate:
+			- `services/`: "Comunicatori" con API esterne (inclusi `gemini.service.js` e `vector.service.js`) e `proactive_analysis.service.js` che isola la logica RAG eseguita in background.
+			- `domain/`: Logica di business pura.
+			- `utils/`: Include `cache.manager.js` che ora esporta due istanze di cache separate.
+			- `tools/`: Script di supporto allo sviluppo, incluso il `data-pipeline.js` per l'aggiornamento della KB.
+			- `sources.json`: File di configurazione che agisce da "telecomando" per l'aggiornamento della conoscenza dell'AI.
+		- Le rotte sono state specializzate:
+			- `/api/get-analysis`: Endpoint primario, ultra-leggero, solo per il controllo della cache.
+			- `/api/analyze-day-fallback`: Endpoint secondario per la generazione on-demand.
 
-    * Backend (pesca-api):
-        - La struttura modulare e' stata rafforzata per supportare l'architettura P.H.A.N.T.O.M. con responsabilita' separate:
-            - services/: "Comunicatori" con API esterne (inclusi gemini.service.js e vector.service.js) e proactive_analysis.service.js che isola la logica RAG eseguita in background.
-            - domain/: Logica di business pura, inclusa la knowledge_base.js.
-            - utils/: Include cache.manager.js che ora esporta due istanze di cache separate.
-            - tools/: Script di supporto allo sviluppo (es. seeder-vector.js).
-        - Le rotte sono state specializzate:
-            - /api/get-analysis: Endpoint primario, ultra-leggero, solo per il controllo della cache.
-            - /api/analyze-day-fallback: Endpoint secondario per la generazione on-demand.
-
-    * Frontend (pesca_app):
-        - La struttura modulare supporta un Design System avanzato ("Premium Plus").
-        - Gestione Stato Globale (forecast_screen.dart): Lo stato dei componenti modali e' gestito a livello di schermata per abilitare effetti globali come il "Modal Focus".
-        - La logica di interazione con l'IA e' stata resa piu' intelligente:
-            - api_service.dart: Orchestra il flusso a due fasi, chiamando prima /api/get-analysis e poi, solo se necessario, /api/analyze-day-fallback.
-            - analyst_card.dart (chiave): Mostra l'analisi RAG con motion design a cascata ("stagger"), tipografia avanzata (Lato, Lora), palette calda (ambra/corallo), e layout scorrevole. Riceve i dati di ForecastData dalla schermata principale per ottimizzare la chiamata di fallback, eliminando la ridondanza dei dati.
-        - Widgets Potenziati ("Premium Plus"):
-            - main_hero_module.dart: Usa uno Stack per visualizzare la card di analisi in un layer sovrapposto, con un trigger animato e BackdropFilter.
-            - hourly_forecast.dart / weekly_forecast.dart: Componenti esistenti pronti per essere allineati al nuovo Design System.
+	* Frontend (pesca_app):
+		- La struttura modulare supporta un Design System avanzato ("Premium Plus").
+		- **Gestione Stato Globale (`forecast_screen.dart`):** Lo stato dei componenti modali è gestito a livello di schermata per abilitare effetti globali come il "Modal Focus".
+		- La logica di interazione con l'IA è stata resa più intelligente:
+			- `api_service.dart`: Orchestra il flusso P.H.A.N.T.O.M. a due fasi, chiamando prima `/api/get-analysis` (con logica di retry per il "wake-up" del server) e poi, solo se necessario, `/api/analyze-day-fallback`.
+			- `analyst_card.dart` (chiave): Mostra l'analisi RAG con motion design a cascata ("stagger"), tipografia avanzata (Lato, Lora), palette calda (ambra/corallo), e layout scorrevole. Gestisce gli stati di caricamento/successo per mostrare lo Skeleton Loader o il Markdown.
+		- **Widgets Potenziati ("Premium Plus"):**
+			- `main_hero_module.dart`: Usa uno `Stack` per visualizzare la card di analisi in un layer sovrapposto, con un trigger animato e `BackdropFilter`.
+			- `analysis_skeleton_loader.dart`: Fornisce un feedback visivo immediato con animazione "shimmer" durante l'attesa del fallback.
 
 ---
 ### ARCHITETTURA
@@ -162,20 +209,20 @@ Strategia di caching a tre livelli per performance estreme:
 +---------------------------------------+
 |     FLUTTER APP (Android)             |
 +---------------------------------------+
-         |           |
-         |           | (1. HTTP GET /api/forecast)
-         |           |
-         |           +--------------------------------+
-         |                                            |
-         | (3. HTTP POST /api/get-analysis)           |
-         |                                            |
-         +--------------------+                       |
-                              |                       |
-         | (4. HTTP POST /api/analyze-day-fallback)   |
-         |                                            |
-         +--------------------+                       |
-                              |                       |
-                              V                       V
+      |           |
+      |           | (1. HTTP GET /api/forecast)
+      |           |
+      |           +--------------------------------+
+      |                                            |
+      | (3. HTTP POST /api/get-analysis)           |
+      |                                            |
+      +--------------------+                       |
+      |                    |
+      | (4. HTTP POST /api/analyze-day-fallback)   |
+      |                                            |
+      +--------------------+                       |
+      |                    |
+      V                    V
 +==============================================================================+
 |                                                                              |
 |                   RENDER.COM - Backend 'pesca-api' (Node.js)                 |
@@ -204,81 +251,91 @@ Strategia di caching a tre livelli per performance estreme:
 |                                                                              |
 |  +-----------------------------+                                             |
 |  |   /api/analyze-day-fallback |------> Legge myCache -> Esegue RAG         |
-|  |          Logic              |        on-demand                            |
+|  |          Logic              |        on-demand -> Scrive analysisCache    |
 |  +-----------------------------+                                             |
 |                                                                              |
 +==============================================================================+
-                              ^
-                              |
-                              | (Chiamata da Cron Job ogni 6h)
-                              |
-                    +-----------------------+
-                    |    CRON-JOB.ORG       |
-                    | /api/update-cache     |
-                    +-----------------------+
+      ^
+      |
+      | (Chiamata da Cron Job ogni 6h)
+      |
++-----------------------+
+|    CRON-JOB.ORG       |
+| /api/update-cache     |
++-----------------------+
 
 
 ================================================================================
-                        DEPLOYMENT & DEVELOPMENT
+DEPLOYMENT & DEVELOPMENT
 ================================================================================
 
 +------------------------+          +---------------------------+
 |   LOCAL DEV            |          |   GITHUB REPO             |
-|                        |          |   (pesca_app)             |
-|                        |--------->|                           |
-|                        |          +---------------------------+
-|                        | Git Push          ^      |
-|                        |                   |      | Git Clone/Push
-|                        |                   |      |
-|                        |                   |      V
-|                        |          +---------------------------+
-|                        |          |   FLUTTER APP (Android)   |
-|                        |          +---------------------------+
+|                        |--------->|   (pesca_app)             |
+|                        | Git Push +---------------------------+
+|                        |                               ^      |
+|                        |                               |      | Git Clone/Push
+|                        |                               |      |
+|                        |                               |      V
+|                        |                      +---------------------------+
+|                        |                      |   FLUTTER APP (Android)   |
+|                        |                      +---------------------------+
 |                        |
 |                        |
-|                        |          +---------------------------+
-|                        |          |   GITHUB REPO             |
-|                        |--------->|   (pesca-api)             |
-|                        | Git Push |                           |
 +------------------------+          +---------------------------+
-                                             |
-                                             | Auto-deploy
-                                             |
-                                             V
-                                    +---------------------------+
-                                    |   RENDER.COM              |
-                                    |   Backend (Node.js)       |
-                                    +---------------------------+
+|   LOCAL DEV (RAG)      |          |   GITHUB REPO             |
+|                        |--------->|   (pesca-api)             |
+| +--------------------+ | Git Push +---------------------------+
+| | sources.json       | |
+| | (Il "Telecomando") | |
+| +--------------------+ |
++------------------------+
+             |
+             +----(Trigger: Push di sources.json)----+
+             |                                       |
+             V                                       |
++--------------------------------+                   |
+|   GITHUB ACTIONS (Workflow)    |                   |
+| (Esegue data-pipeline.js)      |                   |
++--------------------------------+                   | (Auto-deploy su commit a 'main')
+             |                                       |
+             +---------------------------------------+
+                                   V
+                        +---------------------------+
+                        |   RENDER.COM              |
+                        |   Backend (Node.js)       |
+                        +---------------------------+
 
 ================================================================================
 
 
 ---
-### 8. METADATA PROGETTO (per riferimento rapido / v6.0)
+### 8. METADATA PROGETTO (per riferimento rapido / v7.0)
 ---
 
-    VERSIONI CRITICHE:
-        - Flutter: 3.24.0 (minima)
-        - Dart: 3.5.0 (minima)
-        - Node.js: 20.x (backend)
+	VERSIONI CRITICHE:
+		- Flutter: 3.24.0 (minima)
+		- Dart: 3.5.0 (minima)
+		- Node.js: 20.x (backend)
 
-    PACCHETTI BACKEND CHIAVE:
-        - express: latest
-        - @google/generative-ai: latest
-        - chromadb: latest
-        - axios: latest
-        - dotenv: latest
+	PACCHETTI BACKEND CHIAVE:
+		- express: latest
+		- @google/generative-ai: latest
+		- serpapi: latest
+		- axios: latest
+		- dotenv: latest
+		- node-cache: latest
 
-    PACCHETTI FRONTEND CHIAVE:
-        - http: latest
-        - geolocator: ^11.0.0
-        - fl_chart: ^0.68.0
-        - shared_preferences: ^2.2.0
-        - flutter_staggered_animations: latest
-        - flutter_markdown: ^0.7.1
-        - google_fonts: ^6.2.1
+	PACCHETTI FRONTEND CHIAVE:
+		- http: latest
+		- geolocator: ^11.0.0
+		- fl_chart: ^0.68.0
+		- shared_preferences: ^2.2.0
+		- flutter_staggered_animations: latest
+		- flutter_markdown: ^0.7.1
+		- google_fonts: ^6.2.1
 
-    ENDPOINT API PRINCIPALI:
+	ENDPOINT API PRINCIPALI:
 		- Forecast (Dati + Trigger AI): GET https://pesca-api.onrender.com/api/forecast?location={}
 		- Analysis (Cache Check):   POST https://pesca-api.onrender.com/api/get-analysis (body: lat, lon)
 		- Analysis (Fallback):      POST https://pesca-api.onrender.com/api/analyze-day-fallback (body: lat, lon)
@@ -286,22 +343,23 @@ Strategia di caching a tre livelli per performance estreme:
 		- Autocomplete:             GET https://pesca-api.onrender.com/api/autocomplete?q={}
 		- Reverse Geocode:          GET https://pesca-api.onrender.com/api/reverse-geocode?lat={}&lon={}
 
-    LOCALITA DI TEST:
-        - Posillipo (Premium + Corrente): 40.7957, 14.1889
-        - Generico (Standard): 45.4642, 9.1900 (Milano)
-        - Generico Mare (Test Dati Marini): 41.8902, 12.4922 (Roma)
+	LOCALITA DI TEST:
+		- Posillipo (Premium + Corrente): 40.7957, 14.1889
+		- Generico (Standard): 45.4642, 9.1900 (Milano)
+		- Generico Mare (Test Dati Marini): 41.8902, 12.4922 (Roma)
 
-    LIMITI NOTI / RATE LIMITS:
-        - Google Gemini API (Piano Gratuito): 60 richieste/minuto (QPM).
-        - Stormglass API: 10 req/day (usato solo per la corrente a Posillipo).
-        - WWO API: 500 req/day.
-        - Open-Meteo: Limite "soft" molto generoso.
+	LIMITI NOTI / RATE LIMITS:
+		- Google Gemini API (Piano Gratuito): 60 richieste/minuto (QPM).
+		- SerpApi (Piano Gratuito): 100 ricerche/mese.
+		- Stormglass API: 10 req/day (usato solo per la corrente a Posillipo).
+		- WWO API: 500 req/day.
+		- Open-Meteo: Limite "soft" molto generoso.
 
-    FILE DA NON MODIFICARE MAI:
-        - pubspec.lock, package-lock.json
-        - Cartella build/, .dart_tool/, node_modules/
-        - Qualsiasi file con suffisso .g.dart generato automaticamente
-        - Contenuto delle cartelle android/.gradle/ o ios/Pods/
+	FILE DA NON MODIFICARE MAI:
+		- pubspec.lock, package-lock.json
+		- Cartella build/, .dart_tool/, node_modules/
+		- Qualsiasi file con suffisso .g.dart generato automaticamente
+		- Contenuto delle cartelle android/.gradle/ o ios/Pods/
 
 ---
 ### 9. ANTI-PATTERN DA EVITARE (OBBLIGATORIO)
@@ -615,58 +673,58 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 | | -- RunnerTests/
 | | --  .gitignore
 |-- lib/ # Cuore dell'applicazione. Contiene tutto il codice sorgente Dart.
-| | -- models/ # Definisce le strutture dati (POJO/PODO).
-| | | --forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca. Include il metodo toJson() per la serializzazione. E' il contratto tra FE e BE.
-| | -- screens/ # Componenti di primo livello che rappresentano un'intera schermata.
-| | | -- forecast_screen.dart # Lo "Stato Centrale" della UI. E' uno StatefulWidget complesso che gestisce lo stato globale della schermata (dati meteo, pagina corrente) e orchestra effetti a livello di app come il "Modal Focus" (sfocatura globale) quando la AnalystCard e' attiva.
-| | -- services/ # Moduli dedicati alle interazioni con sistemi esterni (backend, GPS).
-| | | -- api_service.dart # Il "Data Layer". Centralizza TUTTE le chiamate HTTP al backend. Implementa l'architettura P.H.A.N.T.O.M. a due fasi per l'analisi AI: prima una chiamata istantanea alla cache (/get-analysis), poi un fallback ottimizzato on-demand (/analyze-day-fallback).
-| | -- utils/ # Funzioni helper pure, stateless e riutilizzabili.
-| | | -- weather_icon_mapper.dart # Traduttore di codici meteo (WMO, WWO) e stringhe in IconData e Color, garantendo consistenza visiva.
-| | -- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
-| | | -- analyst_card.dart # [CHIAVE-AI] Widget stateful che orchestra la visualizzazione dell'analisi. Gestisce gli stati (caricamento, successo, errore) e decide se mostrare lo Skeleton Loader (per il fallback) o il contenuto Markdown ricevuto istantaneamente.
-| | | -- analysis_skeleton_loader.dart # [CHIAVE-UX] Componente "Premium Plus" che mostra un placeholder animato (effetto "shimmer") durante l'attesa dell'analisi di fallback, migliorando la percezione della performance.
-| | | -- fishing_score_indicator.dart # Dataviz specializzato. Visualizza il pescaScore aggregato tramite un set di icone-amo stilizzate, indicando a colpo d'occhio il potenziale di pesca.
-| | | -- glassmorphism_card.dart # Il "pilastro" del nostro Design System di Profondita'. Widget riutilizzabile che crea un pannello con effetto vetro smerigliato (BackdropFilter), fondamentale per la gerarchia visiva.
-| | | -- hourly_forecast.dart # Widget tabellare ad alta densita' di informazioni. Mostra le previsioni ora per ora con logica di "Heatmap" dinamica (colori caldi/freddi) per vento, onde e umidita', e animazioni a cascata.
-| | | -- location_services_dialog.dart # Gestore di permessi. Dialogo standardizzato per guidare l'utente nell'attivazione dei servizi di localizzazione quando sono disabilitati.
-| | | -- main_hero_module.dart # Il "biglietto da visita" della schermata. E' il componente principale che mostra i dati salienti (localita', temperatura) e funge da "host" per il trigger della feature AI (l'icona _PulsingIcon), gestendo l'attivazione dell'overlay "Modal Focus".
-| | | -- score_chart_dialog.dart # Dataviz interattivo. Mostra un dialogo modale con un grafico a linee (fl_chart) per l'andamento orario del pescaScore.
-| | | -- score_details_dialog.dart # Spiegazione del "perche'". Dialogo che mostra i fattori positivi/negativi (reasons) che hanno contribuito a un determinato punteggio orario.
-| | | -- search_overlay.dart # Motore di ricerca UI. Un layer sovrapposto che gestisce la ricerca di localita' tramite autocomplete e l'accesso rapido al GPS.
-| | | -- stale_data_dialog.dart # Gestore di fallback. Dialogo che avvisa l'utente quando l'app sta usando dati in cache obsoleti a causa di un errore di rete, offrendo una scelta.
-| | | -- weekly_forecast.dart # Dataviz settimanale. Lista che mostra le previsioni aggregate per i giorni successivi, inclusi min/max di temperatura e il pescaScore medio giornaliero.
-| | -- main.dart # Il punto di ingresso. Inizializza l'app, imposta eventuali provider/servizi globali (come il Theme) e avvia la ForecastScreen.
+|   |-- models/ # Definisce le strutture dati (POJO/PODO).
+|   |   `-- forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca. Include il metodo toJson() per la serializzazione. E' il contratto tra FE e BE.
+|   |-- screens/ # Componenti di primo livello che rappresentano un'intera schermata.
+|   |   `-- forecast_screen.dart # Lo "Stato Centrale" della UI. E' uno StatefulWidget complesso che gestisce lo stato globale della schermata (dati meteo, pagina corrente) e orchestra effetti a livello di app come il "Modal Focus" (sfocatura globale) quando la AnalystCard e' attiva.
+|   |-- services/ # Moduli dedicati alle interazioni con sistemi esterni (backend, GPS).
+|   |   `-- api_service.dart # Il "Data Layer". Centralizza TUTTE le chiamate HTTP al backend. Implementa l'architettura P.H.A.N.T.O.M. a due fasi per l'analisi AI: prima una chiamata istantanea alla cache (/get-analysis), poi un fallback ottimizzato on-demand (/analyze-day-fallback).
+|   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili.
+|   |   `-- weather_icon_mapper.dart # Traduttore di codici meteo (WMO, WWO) e stringhe in IconData e Color, garantendo consistenza visiva.
+|   |-- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
+|   |   |-- analyst_card.dart # [CHIAVE-AI] Widget stateful che orchestra la visualizzazione dell'analisi. Gestisce gli stati (caricamento, successo, errore) e decide se mostrare lo Skeleton Loader (per il fallback) o il contenuto Markdown ricevuto istantaneamente.
+|   |   |-- analysis_skeleton_loader.dart # [CHIAVE-UX] Componente "Premium Plus" che mostra un placeholder animato (effetto "shimmer") durante l'attesa dell'analisi di fallback, migliorando la percezione della performance.
+|   |   |-- fishing_score_indicator.dart # Dataviz specializzato. Visualizza il pescaScore aggregato tramite un set di icone-amo stilizzate, indicando a colpo d'occhio il potenziale di pesca.
+|   |   |-- glassmorphism_card.dart # Il "pilastro" del nostro Design System di Profondita'. Widget riutilizzabile che crea un pannello con effetto vetro smerigliato (BackdropFilter), fondamentale per la gerarchia visiva.
+|   |   |-- hourly_forecast.dart # Widget tabellare ad alta densita' di informazioni. Mostra le previsioni ora per ora con logica di "Heatmap" dinamica (colori caldi/freddi) per vento, onde e umidita', e animazioni a cascata.
+|   |   |-- location_services_dialog.dart # Gestore di permessi. Dialogo standardizzato per guidare l'utente nell'attivazione dei servizi di localizzazione quando sono disabilitati.
+|   |   |-- main_hero_module.dart # Il "biglietto da visita" della schermata. E' il componente principale che mostra i dati salienti (localita', temperatura) e funge da "host" per il trigger della feature AI (l'icona _PulsingIcon), gestendo l'attivazione dell'overlay "Modal Focus".
+|   |   |-- score_chart_dialog.dart # Dataviz interattivo. Mostra un dialogo modale con un grafico a linee (fl_chart) per l'andamento orario del pescaScore.
+|   |   |-- score_details_dialog.dart # Spiegazione del "perche'". Dialogo che mostra i fattori positivi/negativi (reasons) che hanno contribuito a un determinato punteggio orario.
+|   |   |-- search_overlay.dart # Motore di ricerca UI. Un layer sovrapposto che gestisce la ricerca di localita' tramite autocomplete e l'accesso rapido al GPS.
+|   |   |-- stale_data_dialog.dart # Gestore di fallback. Dialogo che avvisa l'utente quando l'app sta usando dati in cache obsoleti a causa di un errore di rete, offrendo una scelta.
+|   |   `-- weekly_forecast.dart # Dataviz settimanale. Lista che mostra le previsioni aggregate per i giorni successivi, inclusi min/max di temperatura e il pescaScore medio giornaliero.
+|   `-- main.dart # Il punto di ingresso. Inizializza l'app, imposta eventuali provider/servizi globali (come il Theme) e avvia la ForecastScreen.
 |-- linux/ # Wrapper nativo Linux.
-| | -- flutter/
-| | -- runner/
-| | -- .gitignore
-| | -- CMakeLists.txt
+|   | -- flutter/
+| 	| -- runner/
+| 	| -- .gitignore
+| 	| -- CMakeLists.txt
 |-- macos/ # Wrapper nativo macOS.
-| | -- Flutter/
-| | -- Runner/
-| | -- Runner.xcodeproj/
-| | -- Runner.xcworkspace/
-| | -- RunnerTests/
-| | -- .gitignore
+| 	| -- Flutter/
+| 	| -- Runner/
+| 	| -- Runner.xcodeproj/
+| 	| -- Runner.xcworkspace/
+| 	| -- RunnerTests/
+| 	| -- .gitignore
 |-- node_modules/ # Sottocartella.
-| | -- .bin/
-| | -- chromadb/
-| | -- chromadb-js-bindings-win32-x64-msvc/
-| | -- semver/
-| | -- .package-lock.json
+| 	| -- .bin/
+| 	| -- chromadb/
+| 	| -- chromadb-js-bindings-win32-x64-msvc/
+| 	| -- semver/
+| 	| -- .package-lock.json
 | test/ # Contiene i file per i test automatici.
-|-- | -- widget_test.dart
+|   | -- widget_test.dart
 |-- web/ # Codice sorgente per la versione web.
-| | -- icons/
-| | -- favicon.png
-| | -- index.html
-| | -- manifest.json
+| 	| -- icons/
+| 	| -- favicon.png
+| 	| -- index.html
+| 	| -- manifest.json
 |-- windows/ # Wrapper nativo Windows.
-| | -- flutter/
-| | -- runner/
-| | -- .gitignore
-| | -- CMakeLists.txt
+| 	| -- flutter/
+| 	| -- runner/
+| 	| -- .gitignore
+| 	| -- CMakeLists.txt
 |-- .flutter-plugins-dependencies # File di tipo '.flutter-plugins-dependencies'.
 |-- .gitignore # Specifica i file da ignorare nel controllo di versione.
 |-- .metadata # File generato da Flutter per tracciare le proprietà del progetto.
@@ -683,47 +741,51 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 ```
 
 ### Backend: `pesca-api`
-La seguente è una rappresentazione commentata della struttura attuale del progetto backend, arricchita con la conoscenza architetturale:
+La seguente è una rappresentazione commentata della struttura attuale del progetto backend, arricchita con la conoscenza architetturale v7.0 (P.H.A.N.T.O.M. e CI/CD).
 
 ```
-|-- api/ # Contiene i file che definiscono le route e la logica API.
-|   |-- autocomplete.js # Modulo che esporta funzionalità o dati.
-|   |-- reverse-geocode.js # Modulo che esporta funzionalità o dati.
--- lib/ # Contiene tutta la logica di business e i moduli core dell'applicazione.
-| |-- domain/ # Contiene la logica di business pura, slegata da API e framework.
-| | |-- knowledge_base.js # La "libreria" statica. Definisce i documenti di testo grezzi sulla pesca che verranno usati per popolare il database vettoriale. Non contiene logica, solo dati.
-| | |-- score.calculator.js # Il "Calcolatore". Contiene la funzione pura calculateHourlyPescaScore. La sua unica responsabilita' e' prendere dati meteo-marini e restituire un punteggio numerico e le ragioni.
-| | -- window.calculator.js # L' "Ottimizzatore". Contiene la funzione pura findBestTimeWindow. La sua unica responsabilita' e' analizzare una serie di punteggi e trovare le fasce orarie migliori. 
-| |-- services/ # "Ambasciatori" verso il mondo esterno. Ogni file gestisce la comunicazione con una singola API. 
-| | |-- gemini.service.js # Interfaccia con Google AI. Espone generateAnalysis(per creare testo) e la logica di embedding per il seeder. 
-| | |-- openmeteo.service.js # Specialista di Open-Meteo. Contiene la funzionefetchOpenMeteoHourlyche recupera i dati orari ad alta risoluzione. 
-| | |-- proactive_analysis.service.js # [CHIAVE-PHANTOM] Il motore dell'analisi proattiva. Contiene la logica per eseguire un'analisi RAG completa in background e salvarla nellaanalysisCache. 
-| | |-- stormglass.service.js # Specialista di Stormglass. Contiene la funzione fetchStormglassDatache recupera i dati marini premium (corrente). 
-| | |-- vector.service.js # Il "Bibliotecario Intelligente". Incapsula la logica di ricerca nel database vettoriale. EsponequeryKnowledgeBaseper trovare i "fatti" piu' pertinenti. 
-| | -- wwo.service.js # Specialista di WorldWeatherOnline. Contiene la funzione fetchWwoDaily per recuperare dati base come astronomia e maree.
-| |-- utils/ # La "cassetta degli attrezzi". Funzioni pure, piccole e riutilizzabili ovunque.
-| | |-- cache.manager.js # Gestore della Cache. Esporta due istanze separate: myCache per i dati meteo e analysisCache per le analisi AI, garantendo strategie di caching indipendenti.
-| | |-- formatter.js # Specialista di Formattazione. Contiene tutte le funzioni per la presentazione dei dati (es. formatTimeToHHMM, capitalize, getSeaStateAcronym).
-| | |-- geo.utils.js # Specialista Geospaziale. Contiene funzioni puramente matematiche/geografiche, come areCoordsNear.
-| | -- wmo_code_converter.js # Specialista di Codici Meteo. Contiene convertWmoToWwoCode, getWeatherDescription, e degreesTo16PointDirection. 
-| -- forecast-logic.js # IL DIRETTORE D'ORCHESTRA. La sua funzione master getUnifiedForecastData orchestra il recupero dei dati meteo, gestisce la myCache e, crucialmente, innesca l'analisi proattiva in background tramite proactive_analysis.service.js dopo ogni aggiornamento.
-|-- public/ # Contiene file statici serviti al client.
-|   |-- fish_icon.png # File di tipo '.png'.
-|   |-- half_moon.png # File di tipo '.png'.
-|   |-- index.html # File HTML.
-|   |-- logo192.png # File di tipo '.png'.
-|   |-- logo512.png # File di tipo '.png'.
-|   |-- manifest.json # File di dati/configurazione JSON.
-|-- tools/ # Contiene script e tool di supporto per lo sviluppo.
-|   |-- seed-vector.js # /tools/seed-vector.js
-|   |-- Update-ProjectDocs.ps1 # Questo script. Genera e aggiorna la documentazione unificata nel README principale del progetto.
-|-- .env # Contiene le variabili d'ambiente (dati sensibili).
+|-- .github/ # Contiene i workflow di automazione per GitHub Actions.
+|   |-- workflows/ # Contiene i file di configurazione dei workflow, come 'update-kb.yml'.
+|-- api/ # Contiene la logica specifica per le route REST più semplici.
+|   |-- autocomplete.js # Gestisce la logica per i suggerimenti di località.
+|   `-- reverse-geocode.js # Gestisce la logica per la geolocalizzazione inversa.
+|-- lib/ # Contiene tutta la logica di business e i moduli core dell'applicazione.
+|   |-- domain/ # Contiene la logica di business pura, slegata da API e framework.
+|   |   |-- knowledge_base.js # [OBSOLETO] La "libreria" statica. Definisce i documenti di testo grezzi. È stato sostituito dal file dinamico 'knowledge_base.json'.
+|   |   |-- score.calculator.js # Il "Calcolatore". Contiene la funzione pura `calculateHourlyPescaScore` per calcolare il Punteggio Pesca.
+|   |   `-- window.calculator.js # L' "Ottimizzatore". Contiene la funzione pura `findBestTimeWindow` per trovare le fasce orarie migliori.
+|   |-- services/ # "Ambasciatori" verso il mondo esterno. Ogni file gestisce la comunicazione con una singola API o sistema.
+|   |   |-- gemini.service.js # Interfaccia con Google AI. Espone `generateAnalysis` (per creare testo) e la logica di embedding per il data pipeline.
+|   |   |-- openmeteo.service.js # Specialista di Open-Meteo per i dati orari ad alta risoluzione.
+|   |   |-- proactive_analysis.service.js # [CHIAVE-PHANTOM] Il motore dell'analisi proattiva. Esegue la RAG in background e salva il risultato nella `analysisCache`.
+|   |   |-- stormglass.service.js # Specialista di Stormglass per i dati marini premium (corrente).
+|   |   |-- vector.service.js # Il "Bibliotecario Intelligente". Gestisce l'intero ciclo di vita della KB: carica `knowledge_base.json`, espone `queryKnowledgeBase` per la ricerca e `saveKnowledgeBaseToFile`.
+|   |   `-- wwo.service.js # Specialista di WorldWeatherOnline per dati base come astronomia e maree.
+|   |-- utils/ # La "cassetta degli attrezzi". Funzioni pure, piccole e riutilizzabili.
+|   |   |-- cache.manager.js # Gestore della Cache. Esporta due istanze: `myCache` per i dati meteo e `analysisCache` per le analisi AI.
+|   |   |-- formatter.js # Specialista di Formattazione per la presentazione dei dati.
+|   |   |-- geo.utils.js # Specialista Geospaziale per calcoli geografici puri.
+|   |   `-- wmo_code_converter.js # Specialista di Codici Meteo per la traduzione di codici e descrizioni.
+|   `-- forecast-logic.js # IL DIRETTORE D'ORCHESTRA. La sua funzione master `getUnifiedForecastData` orchestra il recupero dei dati, gestisce la `myCache` e innesca l'analisi proattiva.
+|-- public/ # Contiene file statici serviti al client (icone, manifest, etc.).
+|-- tools/ # Contiene script e tool di supporto per lo sviluppo e l'automazione.
+|   |-- data-pipeline.js # [CHIAVE-CI/CD] Lo script della pipeline. Legge da `sources.json`, usa SerpApi/Gemini per raccogliere/vettorizzare la conoscenza e salva `knowledge_base.json`.
+|   |-- Project_lib_extract.ps1 # Script di utilità per l'estrazione di dati dal progetto.
+|   |-- seed-vector.js # [OBSOLETO] Sostituito dalla logica di persistenza in `data-pipeline.js` e `vector.service.js`.
+|   `-- Update-ProjectDocs.ps1 # Script di utilità per la generazione della documentazione.
+|-- .env # Contiene le variabili d'ambiente (dati sensibili, API keys).
+|-- debug.html # File di utilità per il debug.
+|-- knowledge_base.json # [CHIAVE-RAG] IL DATABASE VETTORIALE. File flat generato e aggiornato automaticamente dalla pipeline CI/CD. Contiene i documenti di conoscenza e i loro embeddings.
 |-- package-lock.json # Registra la versione esatta di ogni dipendenza.
 |-- package.json # File manifesto del progetto: dipendenze, script, etc.
-|-- README.md # File di documentazione Markdown.
-|-- server.js # Punto di ingresso principale dell'applicazione. Avvia il server Express e imposta le route.
-|-- test-gemini.js # test-gemini.js
-|-- test_kb.js # test_kb.js
+|-- README.md # File di documentazione Markdown del progetto.
+|-- server.js # Punto di ingresso principale. Avvia Express, imposta le route P.H.A.N.T.O.M. e carica la Knowledge Base all'avvio da `knowledge_base.json`.
+|-- sources.json # [CHIAVE-CI/CD] IL "TELECOMANDO" DELL'AI. File di configurazione che elenca le query. Una sua modifica triggera l'intero workflow di aggiornamento della KB.
+|-- test-gemini.js # Script di utilità per testare la connessione con l'API di Gemini.
+`-- test_kb.js # Script di utilità per testare le query sulla knowledge base locale.
+```
+
+
 
 
 
