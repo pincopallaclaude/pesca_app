@@ -6,6 +6,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/api_service.dart';
+import '../services/cache_service.dart'; // <--- AGGIUNTO
 import '../models/forecast_data.dart';
 import 'analysis_skeleton_loader.dart';
 import 'glassmorphism_card.dart';
@@ -27,7 +28,7 @@ final TextStyle h3Style = GoogleFonts.lato(
     fontWeight: FontWeight.bold,
     height: 1.4);
 
-// Implementazione custom per la Linea Orizzontale (HR) - UNICO BUILDER MANTENUTO
+// Implementazione custom per la Linea Orizzontale (HR)
 class HorizontalRuleBuilder extends MarkdownElementBuilder {
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
@@ -61,16 +62,17 @@ class AnalystCard extends StatefulWidget {
 
 class _AnalystCardState extends State<AnalystCard> {
   final ApiService _apiService = ApiService();
+  final CacheService _cacheService = CacheService(); // <--- AGGIUNTO
   AnalysisState _currentState = AnalysisState.loading;
   String? _analysisText;
   String _errorText = '';
 
-  // Mappa dei builder contenente solo 'hr' (risolto errore _inlines.isEmpty)
+  // Mappa dei builder contenente solo 'hr'
   late final Map<String, MarkdownElementBuilder> _builders = {
     'hr': HorizontalRuleBuilder(),
   };
 
-  // Definisce lo style sheet: rimossi parametri obsoleti (risolto errore 'li'/'marginBottom')
+  // Definisce lo style sheet
   late final MarkdownStyleSheet _styleSheet =
       MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
     h3: h3Style,
@@ -92,33 +94,50 @@ class _AnalystCardState extends State<AnalystCard> {
   @override
   void initState() {
     super.initState();
-    _fetchAnalysis();
+    _initializeAnalysis(); // <--- CHIAMATA AL NUOVO ORCHESTRATORE
   }
 
-  Future<void> _fetchAnalysis() async {
+  /// Nuovo orchestratore per il caricamento dell'analisi.
+  Future<void> _initializeAnalysis() async {
     if (!mounted) return;
-    setState(() {
-      _currentState = AnalysisState.loading;
-    });
+    setState(() => _currentState = AnalysisState.loading);
 
-    // *************************************************************************
-    // CORREZIONE CRITICA: Costruiamo la stringa di coordinate (lat,lon)
-    // *************************************************************************
+    // 1. Prova a caricare dalla cache
+    final cachedAnalysis =
+        await _cacheService.getValidAnalysis(widget.lat, widget.lon);
+    if (cachedAnalysis != null && mounted) {
+      setState(() {
+        _analysisText = cachedAnalysis;
+        _currentState = AnalysisState.success;
+      });
+      return;
+    }
+
+    // 2. Se la cache è vuota, procedi con la chiamata di rete
+    await _fetchAndCacheAnalysis();
+  }
+
+  /// Funzione dedicata al recupero, salvataggio e caricamento dell'analisi dalla rete.
+  Future<void> _fetchAndCacheAnalysis() async {
+    // Assicura che lo stato sia 'loading' se chiamato da un 'Riprova'
+    if (_currentState != AnalysisState.loading) {
+      setState(() => _currentState = AnalysisState.loading);
+    }
+
     final String locationCoords = '${widget.lat},${widget.lon}';
-
-    // Query fissa per l'analisi RAG
     const String analysisQuery =
         'What are the best fishing conditions for today?';
-
-    print(
-        '[AnalystCard DEBUG] Inizio fetchAnalysis con coords: $locationCoords');
+    print('[AnalystCard] Cache MISS. Chiamo la rete per: $locationCoords');
 
     try {
       final result = await _apiService.fetchAnalysis(
         locationCoords,
         analysisQuery,
-        forecastData: widget.forecastData, // <-- PASSAGGIO DEI DATI
+        forecastData: widget.forecastData,
       );
+
+      // Salva il risultato nella cache per le prossime volte
+      await _cacheService.saveAnalysis(result, widget.lat, widget.lon);
 
       if (!mounted) return;
       setState(() {
@@ -136,11 +155,12 @@ class _AnalystCardState extends State<AnalystCard> {
       if (!mounted) return;
       print('[AnalystCard Log] Generic Error: $e');
       setState(() {
-        _errorText = 'A generic error occurred: $e';
+        _errorText = 'An unexpected error occurred.';
         _currentState = AnalysisState.error;
       });
     }
   }
+  // <--- FINE DELLA NUOVA LOGICA DI FETCH
 
   Widget _buildMarkdownContent() {
     if (_analysisText == null || _analysisText!.isEmpty) {
@@ -239,7 +259,7 @@ class _AnalystCardState extends State<AnalystCard> {
               child: Divider(color: Colors.white24, height: 1, thickness: 1),
             ),
 
-            // Staggered child 3: Main content - CORREZIONE FINALE LAYOUT
+            // Staggered child 3: Main content
             // ConstrainedBox risolve l'errore Flexible/Expanded forzando un'altezza massima.
             ConstrainedBox(
               // Altezza massima del contenuto (adatta questo valore se necessario)
@@ -289,7 +309,7 @@ class _AnalystCardState extends State<AnalystCard> {
         const SizedBox(height: 12),
         ElevatedButton.icon(
             icon: const Icon(Icons.refresh, size: 16),
-            onPressed: _fetchAnalysis,
+            onPressed: _initializeAnalysis, // <--- AGGIORNATO
             style: ElevatedButton.styleFrom(backgroundColor: Colors.white10),
             label: const Text('Riprova', style: TextStyle(color: Colors.white)))
       ],

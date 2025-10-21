@@ -1,9 +1,8 @@
-// lib/models/forecast_data.dart
+// lib/screens/forecast_screen.dart
 
-import 'package:flutter/material.dart';
-import '../utils/weather_icon_mapper.dart';
 import 'package:flutter/foundation.dart';
 
+// Definizione della classe ScoreReason
 class ScoreReason {
   final String icon, text, points, type;
 
@@ -22,8 +21,8 @@ class ScoreReason {
       );
 }
 
+// Definizione della classe ForecastData
 class ForecastData {
-  // --- SEZIONE 1: Vecchi campi per retrocompatibilità ---
   final String giornoNome, giornoData, meteoIcon, temperaturaAvg, tempMinMax;
   final String ventoDati, pressione, umidita, mare, altaMarea, bassaMarea;
   final String faseLunare, alba, tramonto, finestraMattino, finestraSera;
@@ -31,8 +30,6 @@ class ForecastData {
   final List<Map<String, dynamic>> hourlyData;
   final List<Map<String, dynamic>> weeklyData;
   final List<Map<String, dynamic>> hourlyScores;
-
-  // --- SEZIONE 2: Nuovi campi per funzionalità avanzate ---
   final double pescaScoreNumeric;
   final double temperaturaMax;
   final double temperaturaMin;
@@ -42,12 +39,11 @@ class ForecastData {
   final int dailyPressure;
   final int dailyWindSpeedKn;
   final int dailyWindDirectionDegrees;
-  final String sunriseTime; // Orari puliti
+  final String sunriseTime;
   final String sunsetTime;
   final String moonPhase;
 
   ForecastData({
-    // Sezione 1
     required this.giornoNome,
     required this.giornoData,
     required this.meteoIcon,
@@ -68,7 +64,6 @@ class ForecastData {
     required this.hourlyData,
     required this.weeklyData,
     required this.hourlyScores,
-    // Sezione 2
     required this.pescaScoreNumeric,
     required this.temperaturaMax,
     required this.temperaturaMin,
@@ -89,11 +84,6 @@ class ForecastData {
       if (value is num) return value;
       if (value is String) return num.tryParse(value) ?? 0;
       return 0;
-    }
-
-    if (kDebugMode) {
-      debugPrint(
-          '[ForecastData Log] Parsing JSON per giorno: ${json['giornoData']}');
     }
 
     final scoreData = json['pescaScoreData'] as Map<String, dynamic>? ?? {};
@@ -157,44 +147,6 @@ class ForecastData {
     );
   }
 
-  /// Serializza l'oggetto ForecastData in una mappa JSON.
-  Map<String, dynamic> toJson() {
-    return {
-      'giornoNome': giornoNome,
-      'giornoData': giornoData,
-      'meteoIcon': meteoIcon,
-      'temperaturaAvg': temperaturaAvg,
-      'tempMinMax': tempMinMax,
-      'ventoDati': ventoDati,
-      'pressione': pressione,
-      'umidita': umidita,
-      'mare': mare,
-      'maree': 'Alta: $altaMarea | Bassa: $bassaMarea',
-      'faseLunare': faseLunare,
-      'alba': alba,
-      'tramonto': tramonto,
-      'finestraMattino': {'orario': finestraMattino},
-      'finestraSera': {'orario': finestraSera},
-      'pescaScoreData': {
-        'numericScore': pescaScoreNumeric,
-        'hourlyScores': hourlyScores,
-      },
-      'temperaturaMax': temperaturaMax,
-      'temperaturaMin': temperaturaMin,
-      'trendPressione': trendPressione,
-      'dailyWeatherCode': dailyWeatherCode,
-      'dailyHumidity': dailyHumidity,
-      'dailyPressure': dailyPressure,
-      'dailyWindSpeedKn': dailyWindSpeedKn,
-      'dailyWindDirectionDegrees': dailyWindDirectionDegrees,
-      'sunriseTime': sunriseTime,
-      'sunsetTime': sunsetTime,
-      'moonPhase': moonPhase,
-      'hourly': hourlyData,
-    };
-  }
-
-  /// Restituisce la previsione oraria più vicina al momento attuale.
   Map<String, dynamic> get currentHourData {
     if (hourlyData.isEmpty) {
       return {
@@ -214,7 +166,6 @@ class ForecastData {
     );
   }
 
-  /// Restituisce la lista di previsioni orarie da mostrare nella riga orizzontale.
   List<Map<String, dynamic>> get hourlyForecastForDisplay {
     if (hourlyData.isEmpty) return [];
     final now = DateTime.now();
@@ -225,7 +176,6 @@ class ForecastData {
       if (hourStr == null) return false;
       final hourTime = int.tryParse(hourStr);
       if (hourTime == null) return false;
-      // Corretto per mostrare dall'ora corrente in poi
       return hourTime >= currentHourInt;
     }).toList();
   }
@@ -268,7 +218,6 @@ class ForecastData {
     };
 
     try {
-      // Funzione interna per un parsing sicuro dell'orario
       DateTime? _parseTime(String timeStr) {
         if (timeStr == 'N/D' || !timeStr.contains(':')) return null;
         final parts = timeStr.split(':');
@@ -282,82 +231,41 @@ class ForecastData {
       final oraCorrente = DateTime.now();
       final oraAlba = _parseTime(sunriseTime);
       final oraTramonto = _parseTime(sunsetTime);
-
-      // Estraiamo il codice meteo dell'ora attuale per priorità massima
       final currentHourWeatherCode = currentHourData['weatherCode']?.toString();
 
-      // Log di Debug Avanzato
-      if (kDebugMode) {
-        debugPrint("\n--- [BACKGROUND DEBUG] Inizio Analisi ---");
-        debugPrint("[BACKGROUND DEBUG] Ora Corrente: $oraCorrente");
-        debugPrint(
-            "[BACKGROUND DEBUG] Dati Orari: sunriseTime='$sunriseTime', sunsetTime='$sunsetTime'");
-        debugPrint(
-            "[BACKGROUND DEBUG] Codici Meteo: currentHourWeatherCode='$currentHourWeatherCode', dailyWeatherCode='$dailyWeatherCode'");
-        debugPrint(
-            "[BACKGROUND DEBUG] Orari Parsati: oraAlba=$oraAlba, oraTramonto=$oraTramonto");
-        debugPrint("--- Fine Analisi ---\n");
-      }
-
-      // 1. GESTIONE ORARI: Se i dati di alba/tramonto non sono validi, la logica oraria non può funzionare.
       if (oraAlba == null || oraTramonto == null) {
-        if (kDebugMode)
-          debugPrint(
-              "[BACKGROUND DEBUG] --> DECISIONE: Parsing alba/tramonto fallito. Controllo solo meteo.");
-        // Controlliamo almeno se piove basandoci sul codice orario attuale
         if (currentHourWeatherCode != null &&
             rainyWeatherCodes.contains(currentHourWeatherCode)) {
           return 'assets/background_rainy.jpg';
         }
-        return 'assets/background_daily.jpg'; // Fallback più sicuro
+        return 'assets/background_daily.jpg';
       }
 
-      // ========= NUOVA SEQUENZA DI IF GERARCHICA E ROBUSTA =========
-
-      // 2. CONDIZIONE METEO AVVERSO (MASSIMA PRIORITÀ): se piove o nevica ORA, mostro lo sfondo piovoso
-      //    indipendentemente dal fatto che sia giorno, tramonto o notte.
       if (currentHourWeatherCode != null &&
           (rainyWeatherCodes.contains(currentHourWeatherCode) ||
               snowyWeatherCodes.contains(currentHourWeatherCode))) {
-        if (kDebugMode)
-          debugPrint(
-              "[BACKGROUND DEBUG] --> DECISIONE: METEO AVVERSO ATTUALE (Codice: $currentHourWeatherCode). Ritorno 'rainy'.");
         return 'assets/background_rainy.jpg';
       }
 
-      // 3. CONDIZIONE NOTTE: se non piove, controlliamo se è notte.
       final trentaMinutiDopoTramonto =
           oraTramonto.add(const Duration(minutes: 30));
       if (oraCorrente.isBefore(oraAlba) ||
           oraCorrente.isAfter(trentaMinutiDopoTramonto)) {
-        if (kDebugMode)
-          debugPrint(
-              "[BACKGROUND DEBUG] --> DECISIONE: Condizione NOCTURNAL soddisfatta.");
         return 'assets/background_nocturnal.jpg';
       }
 
-      // 4. CONDIZIONE TRAMONTO/ALBA: se non è notte e non piove, controlliamo le "golden hours".
-      // L'alba è considerata 1 ora prima fino a 1 ora dopo.
-      // Il tramonto è considerato 1 ora prima fino al tramonto (la fase 'notte' inizia 30 min dopo).
       final unOraPrimaTramonto = oraTramonto.subtract(const Duration(hours: 1));
       final unOraDopoAlba = oraAlba.add(const Duration(hours: 1));
       if (oraCorrente.isAfter(unOraPrimaTramonto) ||
           oraCorrente.isBefore(unOraDopoAlba)) {
-        if (kDebugMode)
-          debugPrint(
-              "[BACKGROUND DEBUG] --> DECISIONE: Condizione SUNSET/SUNRISE soddisfatta.");
         return 'assets/background_sunset.jpg';
       }
 
-      // 5. FALLBACK DIURNO: se nessuna delle condizioni precedenti è vera, allora è giorno con tempo sereno/variabile.
-      if (kDebugMode)
-        debugPrint(
-            "[BACKGROUND DEBUG] --> DECISIONE: Fallback 'daily' finale.");
       return 'assets/background_daily.jpg';
     } catch (e) {
-      if (kDebugMode)
-        debugPrint(
-            "[BACKGROUND DEBUG] --> DECISIONE: ERRORE CATCH GLOBALE: $e.");
+      if (kDebugMode) {
+        debugPrint("[BACKGROUND DEBUG] ERRORE CATCH GLOBALE: $e.");
+      }
       return 'assets/background_daily.jpg';
     }
   }

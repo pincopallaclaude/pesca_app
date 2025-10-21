@@ -4,15 +4,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/forecast_data.dart';
-
-// Ripristiniamo l'eccezione, che è richiesta da forecast_screen.dart
-class NetworkErrorWithStaleDataException implements Exception {
-  final String staleJsonData;
-  const NetworkErrorWithStaleDataException(this.staleJsonData);
-}
 
 class LocationServicesDisabledException implements Exception {
   final String message = 'Location services are disabled.';
@@ -30,74 +23,29 @@ class ApiException implements Exception {
 
 class ApiService {
   final String _baseUrl = 'https://pesca-api-v5.fly.dev/api';
-  final Duration _cacheTTL = const Duration(hours: 6);
+  // Rimosso: final Duration _cacheTTL = const Duration(hours: 6);
   final Duration _forecastTimeout = const Duration(seconds: 20);
 
-  Future<List<ForecastData>> fetchForecastData(String location) async {
-    final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'forecast_$location';
-    final cacheTimestampKey = 'timestamp_$location';
-    final cachedData = prefs.getString(cacheKey);
-    final cachedTimestamp = prefs.getInt(cacheTimestampKey);
-
-    if (cachedData != null && cachedTimestamp != null) {
-      final lastUpdate = DateTime.fromMillisecondsSinceEpoch(cachedTimestamp);
-      if (DateTime.now().difference(lastUpdate) < _cacheTTL) {
-        print(
-            "[ApiService] CACHE HIT (SharedPreferences): Dati freschi trovati.");
-        return parseForecastData(cachedData);
-      }
-    }
-
-    print("[ApiService] CACHE MISS: Chiamata di rete.");
+  /// La sua unica responsabilità è recuperare la stringa JSON grezza dalla rete.
+  Future<String> fetchForecastJson(String location) async {
+    print("[ApiService] Inizio chiamata di rete per: $location");
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/forecast?location=$location'))
           .timeout(_forecastTimeout);
 
       if (response.statusCode == 200) {
-        final data = parseForecastData(response.body);
-        await prefs.setString(cacheKey, response.body);
-        await prefs.setInt(
-            cacheTimestampKey, DateTime.now().millisecondsSinceEpoch);
-        return data;
+        print('[ApiService] Raw JSON ricevuto dal backend.');
+        return response.body;
       } else {
-        throw Exception('Errore del server: ${response.statusCode}');
+        throw ApiException('Errore del server: ${response.statusCode}');
       }
     } on TimeoutException {
-      if (cachedData != null) {
-        throw NetworkErrorWithStaleDataException(cachedData);
-      }
-      throw Exception('Errore di rete (timeout) e nessun dato in cache.');
+      throw const ApiException('Timeout di rete (20s) superato.');
     } catch (e) {
-      if (e is NetworkErrorWithStaleDataException) rethrow;
-      if (cachedData != null) {
-        throw NetworkErrorWithStaleDataException(cachedData);
-      }
-      throw Exception('Errore di rete o server non disponibile.');
-    }
-  }
-
-  List<ForecastData> parseForecastData(String jsonBody) {
-    try {
-      final decoded = json.decode(jsonBody);
-      final dailyListRaw = (decoded['forecast'] as List<dynamic>?) ?? [];
-      final weeklyData = dailyListRaw.map((dayJson) {
-        final dayMap = dayJson as Map<String, dynamic>;
-        return {
-          'day': dayMap['giornoNome'] ?? 'N/A',
-          'meteoIconString': dayMap['meteoIcon'] ?? '',
-          'min': (dayMap['temperaturaMin'] as num?)?.round() ?? 0,
-          'max': (dayMap['temperaturaMax'] as num?)?.round() ?? 0,
-        };
-      }).toList();
-      return dailyListRaw
-          .map((dailyJson) => ForecastData.fromJson(
-              dailyJson as Map<String, dynamic>, weeklyData))
-          .toList();
-    } catch (e) {
-      print("[ApiService] ERRORE DI PARSING: $e");
-      return [];
+      // Semplificato il blocco catch
+      if (e is ApiException) rethrow;
+      throw const ApiException('Errore di rete o server non disponibile.');
     }
   }
 
@@ -158,12 +106,14 @@ class ApiService {
   Future<String> fetchAnalysis(String location, String userQuery,
       {List<ForecastData>? forecastData}) async {
     final coords = location.split(',');
-    if (coords.length != 2)
+    if (coords.length != 2) {
       throw const ApiException("Formato località non valido.");
+    }
     final double? lat = double.tryParse(coords[0].trim());
     final double? lon = double.tryParse(coords[1].trim());
-    if (lat == null || lon == null)
+    if (lat == null || lon == null) {
       throw const ApiException("Coordinate non valide.");
+    }
     const int maxRetries = 2;
     for (int i = 0; i < maxRetries; i++) {
       try {
@@ -212,7 +162,7 @@ class ApiService {
           return fallbackData['data'] as String;
         }
       }
-      throw ApiException('Errore nella risposta di fallback.');
+      throw const ApiException('Errore nella risposta di fallback.');
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
