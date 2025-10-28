@@ -6,7 +6,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import '../services/api_service.dart';
-import '../services/cache_service.dart'; // <--- AGGIUNTO
+import '../services/cache_service.dart';
 import '../models/forecast_data.dart';
 import 'analysis_skeleton_loader.dart';
 import 'glassmorphism_card.dart';
@@ -62,10 +62,11 @@ class AnalystCard extends StatefulWidget {
 
 class _AnalystCardState extends State<AnalystCard> {
   final ApiService _apiService = ApiService();
-  final CacheService _cacheService = CacheService(); // <--- AGGIUNTO
+  final CacheService _cacheService = CacheService();
   AnalysisState _currentState = AnalysisState.loading;
   String? _analysisText;
   String _errorText = '';
+  Map<String, dynamic>? _cachedMetadata; // Variabile di stato per i metadati
 
   // Mappa dei builder contenente solo 'hr'
   late final Map<String, MarkdownElementBuilder> _builders = {
@@ -94,73 +95,124 @@ class _AnalystCardState extends State<AnalystCard> {
   @override
   void initState() {
     super.initState();
-    _initializeAnalysis(); // <--- CHIAMATA AL NUOVO ORCHESTRATORE
+    _initializeAnalysis(); // CHIAMATA ALL'ORCHESTRATORE
   }
 
-  /// Nuovo orchestratore per il caricamento dell'analisi.
+  /// Orchestra il caricamento dell'analisi in 3 fasi: cache locale, cache backend, fallback.
   Future<void> _initializeAnalysis() async {
     if (!mounted) return;
-    setState(() => _currentState = AnalysisState.loading);
-
-    // 1. Prova a caricare dalla cache
-    final cachedAnalysis =
-        await _cacheService.getValidAnalysis(widget.lat, widget.lon);
-    if (cachedAnalysis != null && mounted) {
-      setState(() {
-        _analysisText = cachedAnalysis;
-        _currentState = AnalysisState.success;
-      });
-      return;
-    }
-
-    // 2. Se la cache è vuota, procedi con la chiamata di rete
-    await _fetchAndCacheAnalysis();
-  }
-
-  /// Funzione dedicata al recupero, salvataggio e caricamento dell'analisi dalla rete.
-  Future<void> _fetchAndCacheAnalysis() async {
-    // Assicura che lo stato sia 'loading' se chiamato da un 'Riprova'
-    if (_currentState != AnalysisState.loading) {
-      setState(() => _currentState = AnalysisState.loading);
-    }
-
-    final String locationCoords = '${widget.lat},${widget.lon}';
-    const String analysisQuery =
-        'What are the best fishing conditions for today?';
-    print('[AnalystCard] Cache MISS. Chiamo la rete per: $locationCoords');
+    setState(() {
+      _currentState = AnalysisState.loading;
+      _errorText = '';
+      _cachedMetadata = null;
+    });
 
     try {
-      final result = await _apiService.fetchAnalysis(
-        locationCoords,
-        analysisQuery,
-        forecastData: widget.forecastData,
-      );
+      // 1. Prova a caricare dalla cache locale (Hive)
+      final cachedData =
+          await _cacheService.getValidAnalysis(widget.lat, widget.lon);
+      if (cachedData != null && mounted) {
+        print('[AnalystCard] Cache HIT (Local)');
+        setState(() {
+          _analysisText = cachedData['analysis'] as String;
+          _cachedMetadata = cachedData['metadata'] as Map<String, dynamic>?;
+          _currentState = AnalysisState.success;
+        });
+        return;
+      }
 
-      // Salva il risultato nella cache per le prossime volte
-      await _cacheService.saveAnalysis(result, widget.lat, widget.lon);
+      // 2. Prova cache backend (API service)
+      print('[AnalystCard] Cache MISS (Local). Checking Backend...');
+      final backendCache =
+          await _apiService.getAnalysisFromCache(widget.lat, widget.lon);
+      if (backendCache['status'] == 'ready' && mounted) {
+        print('[AnalystCard] Cache HIT (Backend)');
+        final analysis = backendCache['analysis'] as String;
+        final metadata = backendCache['metadata'] as Map<String, dynamic>?;
 
-      if (!mounted) return;
-      setState(() {
-        _analysisText = result;
-        _currentState = AnalysisState.success;
-      });
+        // Salva il risultato nella cache locale
+        await _cacheService.saveAnalysis(widget.lat, widget.lon, analysis,
+            metadata: metadata);
+
+        setState(() {
+          _analysisText = analysis;
+          _cachedMetadata = metadata;
+          _currentState = AnalysisState.success;
+        });
+        return;
+      }
+
+      // 3. Fallback: genera on-demand
+      print('[AnalystCard] Cache MISS (Backend). Generating on-demand...');
+      final result =
+          await _apiService.generateAnalysisFallback(widget.lat, widget.lon);
+
+      if (mounted) {
+        final analysis = result['analysis'] as String;
+        final metadata = result['metadata'] as Map<String, dynamic>?;
+
+        // Salva il risultato fresco nella cache locale
+        await _cacheService.saveAnalysis(widget.lat, widget.lon, analysis,
+            metadata: metadata);
+
+        setState(() {
+          _analysisText = analysis;
+          _cachedMetadata = metadata;
+          _currentState = AnalysisState.success;
+        });
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
-      print('[AnalystCard Log] API Exception: ${e.message}');
+      print('[AnalystCard] API Exception: ${e.message}');
       setState(() {
         _errorText = e.message;
         _currentState = AnalysisState.error;
       });
     } catch (e) {
       if (!mounted) return;
-      print('[AnalystCard Log] Generic Error: $e');
+      print('[AnalystCard] Generic Error: $e');
       setState(() {
-        _errorText = 'An unexpected error occurred.';
+        _errorText = 'Errore inatteso: ${e.toString()}';
         _currentState = AnalysisState.error;
       });
     }
   }
-  // <--- FINE DELLA NUOVA LOGICA DI FETCH
+
+  /// Costruisce il badge dinamico del modello LLM utilizzato.
+  Widget _buildModelBadge() {
+    String modelDisplay = 'RAG-Powered';
+    if (_cachedMetadata != null && _cachedMetadata!['modelUsed'] != null) {
+      final model = _cachedMetadata!['modelUsed'] as String;
+      // Normalizzazione del nome del modello
+      if (model.contains('gemini')) {
+        modelDisplay = 'RAG | Gemini';
+      } else if (model.contains('claude')) {
+        modelDisplay = 'RAG | Claude';
+      } else if (model.contains('mistral')) {
+        modelDisplay = 'RAG | Mistral';
+      } else {
+        // Fallback per modelli generici o nuovi
+        modelDisplay = 'RAG | ${model.split('-')[0]}';
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+      ),
+      child: Text(
+        modelDisplay,
+        style: GoogleFonts.robotoMono(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+            letterSpacing: 0.5),
+      ),
+    );
+  }
 
   Widget _buildMarkdownContent() {
     if (_analysisText == null || _analysisText!.isEmpty) {
@@ -201,17 +253,13 @@ class _AnalystCardState extends State<AnalystCard> {
   }
 
   Widget _buildSuccessCard({Key? key}) {
-    final headerStyle = GoogleFonts.lato(
-      color: const Color(0xFFFFD700).withOpacity(0.9),
-      fontSize: 14,
-      fontWeight: FontWeight.bold,
-      letterSpacing: 1.2,
-    );
+    // Rimuoviamo la definizione di headerStyle non più necessaria per il testo
+    // principale, ma usiamo il colore per l'icona.
+    final headerIconColor = const Color(0xFFFFD700); // Gold
 
     return AnimationLimiter(
       key: key,
       child: Column(
-        // mainAxisSize.min è essenziale, ma richiede un'altezza definita per il contenuto scrollabile.
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: AnimationConfiguration.toStaggeredList(
@@ -221,24 +269,26 @@ class _AnalystCardState extends State<AnalystCard> {
             child: FadeInAnimation(child: widget),
           ),
           children: [
-            // Staggered child 1: Header
+            // Staggered child 1: Header (Struttura rivista)
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(Icons.auto_awesome, color: headerStyle.color, size: 18),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('INSIGHT DI PESCA', style: headerStyle),
-                    Text('RAG-Powered',
-                        style: GoogleFonts.lato(
-                            color: Colors.white54,
-                            fontSize: 10,
-                            letterSpacing: 1.0)),
-                  ],
+                // Icona e Titolo (con il nuovo stile)
+                Icon(Icons.auto_awesome, color: headerIconColor, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'INSIGHT DI PESCA',
+                  style: GoogleFonts.robotoCondensed(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: Colors.white),
                 ),
+                const SizedBox(width: 10),
+                _buildModelBadge(), // Badge Dinamico
                 const Spacer(),
+
+                // Pulsante di chiusura (preservato)
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -260,7 +310,6 @@ class _AnalystCardState extends State<AnalystCard> {
             ),
 
             // Staggered child 3: Main content
-            // ConstrainedBox risolve l'errore Flexible/Expanded forzando un'altezza massima.
             ConstrainedBox(
               // Altezza massima del contenuto (adatta questo valore se necessario)
               constraints: const BoxConstraints(
@@ -309,7 +358,7 @@ class _AnalystCardState extends State<AnalystCard> {
         const SizedBox(height: 12),
         ElevatedButton.icon(
             icon: const Icon(Icons.refresh, size: 16),
-            onPressed: _initializeAnalysis, // <--- AGGIORNATO
+            onPressed: _initializeAnalysis,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.white10),
             label: const Text('Riprova', style: TextStyle(color: Colors.white)))
       ],

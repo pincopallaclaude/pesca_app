@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../models/forecast_data.dart';
+import '../models/forecast_data.dart'; // Assicurati che questo path sia corretto
 
 class CacheService {
   static const _forecastBoxName = 'forecastCache';
@@ -11,8 +11,20 @@ class CacheService {
   static const _timestampKey = 'lastUpdated';
   static const _ttl = Duration(hours: 6);
 
+  // Le box devono essere aperte prima dell'accesso
+  // Assumiamo che Hive sia già inizializzato e le box siano disponibili
   Box get _forecastBox => Hive.box(_forecastBoxName);
   Box get _analysisBox => Hive.box(_analysisBoxName);
+
+  // Genera la chiave di analisi AI, centralizzando la logica
+  String _generateAnalysisKey(double lat, double lon) {
+    // Usiamo una precisione fissa, come nell'API server (toFixed(3))
+    return 'analysis_${lat.toStringAsFixed(3)}_${lon.toStringAsFixed(3)}';
+  }
+
+  // ---------------------------------------------------------------------------
+  // FORECAST (PREVISIONI METEO)
+  // ---------------------------------------------------------------------------
 
   /// Salva il JSON grezzo delle previsioni nel database Hive.
   Future<void> saveForecast(String forecastJson) async {
@@ -47,6 +59,8 @@ class CacheService {
     try {
       final decoded = json.decode(jsonBody);
       final dailyListRaw = (decoded['forecast'] as List<dynamic>?) ?? [];
+      // Questo blocco 'weeklyData' è una logica specifica del tuo modello ForecastData
+      // che assume una necessità di riassumere i dati giornalieri per i massimi/minimi.
       final weeklyData = dailyListRaw
           .map((d) => {
                 'day': d['giornoNome'],
@@ -65,32 +79,67 @@ class CacheService {
     }
   }
 
-  /// Salva il testo dell'analisi AI nella cache.
-  Future<void> saveAnalysis(String analysisText, double lat, double lon) async {
-    final key = 'analysis_${lat}_$lon';
+  // ---------------------------------------------------------------------------
+  // ANALISI AI (ANALYSIS) - MODIFICATI
+  // ---------------------------------------------------------------------------
+
+  /// Salva l'analisi AI nella cache con metadata (nuovo formato).
+  Future<void> saveAnalysis(
+    double lat,
+    double lon,
+    String analysisText, {
+    Map<String, dynamic>? metadata, // NUOVO: parametro opzionale per i metadati
+  }) async {
+    final key = _generateAnalysisKey(lat, lon);
     final data = {
       'analysis': analysisText,
-      'timestamp': DateTime.now().toIso8601String()
+      'metadata': metadata, // Aggiunto il campo metadata
+      'timestamp':
+          DateTime.now().toIso8601String(), // Mantenuto timestamp come stringa
     };
-    await _analysisBox.put(key, data);
-    print('[CacheService] Analisi AI salvata in cache.');
+    // Serializza la mappa in stringa (come richiesto dal tuo OLD code)
+    await _analysisBox.put(key, jsonEncode(data));
+    print('[CacheService] 💾 Analisi AI salvata in cache: $key');
   }
 
-  /// Recupera un'analisi AI valida dalla cache.
-  Future<String?> getValidAnalysis(double lat, double lon) async {
-    final key = 'analysis_${lat}_$lon';
-    final cachedData = _analysisBox.get(key) as Map<dynamic, dynamic>?;
-    if (cachedData == null) return null;
+  /// Recupera un'analisi AI valida dalla cache. Ritorna una mappa o null.
+  Future<Map<String, dynamic>?> getValidAnalysis(double lat, double lon) async {
+    final key = _generateAnalysisKey(lat, lon);
+    final cached = _analysisBox.get(key)
+        as String?; // Il tuo codice salva una STRINGA JSON
+    if (cached == null) return null;
 
-    final timestampString = cachedData['timestamp'] as String?;
-    final analysisText = cachedData['analysis'] as String?;
-    if (timestampString == null || analysisText == null) return null;
+    try {
+      final data = json.decode(cached) as Map<String, dynamic>;
 
-    final lastUpdated = DateTime.tryParse(timestampString);
-    if (lastUpdated == null || DateTime.now().difference(lastUpdated) > _ttl) {
+      final timestampString = data['timestamp'] as String?;
+      final analysisText = data['analysis'] as String?;
+
+      if (timestampString == null || analysisText == null) {
+        await _analysisBox.delete(key);
+        return null;
+      }
+
+      final lastUpdated = DateTime.tryParse(timestampString);
+      if (lastUpdated == null ||
+          DateTime.now().difference(lastUpdated) > _ttl) {
+        await _analysisBox.delete(key);
+        print('[CacheService] 🗑️ Analisi AI scaduta eliminata: $key');
+        return null;
+      }
+
+      print('[CacheService] ✅ Cache HIT AI: Analisi valida trovata.');
+
+      // Ritorna la mappa completa che include analysis e metadata (potrebbe essere null)
+      return {
+        'analysis': analysisText,
+        'metadata': data['metadata'] as Map<String, dynamic>?,
+      };
+    } catch (e) {
+      print(
+          '[CacheService] ⚠️ Errore parsing analisi AI: $e. Pulisco cache corrotta.');
+      await _analysisBox.delete(key);
       return null;
     }
-    print('[CacheService] Cache HIT AI: Analisi valida trovata.');
-    return analysisText;
   }
 }
