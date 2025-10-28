@@ -1,4 +1,4 @@
-// lib/controllers/forecast_controller.dart
+// lib/controllers/forecast_viewmodel.dart
 
 import 'package:flutter/material.dart';
 import '../models/forecast_data.dart';

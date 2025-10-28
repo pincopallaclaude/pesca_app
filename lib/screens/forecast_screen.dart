@@ -5,7 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:light/light.dart';
 
-import '../controllers/forecast_controller.dart';
+import '../viewmodels/forecast_viewmodel.dart';
 import '../models/forecast_data.dart';
 import '../services/api_service.dart';
 import '../services/cache_service.dart';

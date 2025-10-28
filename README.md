@@ -263,7 +263,7 @@ Strategia di caching a tre livelli per performance estreme:
 
 	* Servizi AI Utilizzati:
 		- Google Gemini Pro (via API):
-			- Modello Generativo (gemini-1.5-flash): Per la generazione di testo dell'analisi.
+			- Modello Generativo (gemini-2.5-flash): Per la generazione di testo dell'analisi.
 			- Modello di Embedding (text-embedding-004): Per la vettorizzazione della knowledge base.
 			- Uso: Analisi standard per condizioni meteo non complesse o come fallback finale.
 		- Mistral AI (Alternativa Gratuita per Complessità):
@@ -306,20 +306,24 @@ Strategia di caching a tre livelli per performance estreme:
 ### 7. STRUTTURA DEL PROGETTO AD ALTO LIVELLO
 ---
     
+---
+### 7. STRUTTURA DEL PROGETTO AD ALTO LIVELLO
+---
+    
 	* Backend (pesca-api):
 		- La struttura modulare è stata rafforzata per supportare l'architettura P.H.A.N.T.O.M. + MCP + Advanced AI Features con responsabilità separate:
 			- `mcp/`: Infrastruttura Model Context Protocol
 				- `server.js`: MCP Server embedded (8 tool registrati)
 				- `tools/`: Tool AI
 					- Base: `vector_search.js`, `generate_analysis.js`
-					- **Advanced v7.2 (NUOVO)**: `analyze-with-best-model.js`, `recommend-for-species.js`, `extract-intent.js`, `natural-language-forecast.js`
+					- **Advanced v7.2**: `analyze-with-best-model.js`, `recommend-for-species.js`, `extract-intent.js`, `natural-language-forecast.js`
 				- `resources/`: Resource MCP (`knowledge-base.js`)
 			- `lib/services/`: "Comunicatori" con API esterne e servizi interni
 				- `mcp-client.service.js`: Bridge MCP Client
 				- `proactive_analysis.service.js`: Orchestratore analisi proattiva (USA `analyze_with_best_model`)
 				- `gemini.service.js`: Wrapper API Gemini (Google)
-				- `mistral.service.js`: - Wrapper API Mistral (alternativa gratuita per analisi complesse)
-				- `claude.service.js`: - Wrapper API Claude (Anthropic), opzionale
+				- `mistral.service.js`: Wrapper API Mistral (alternativa gratuita per analisi complesse)
+				- `claude.service.js`: Wrapper API Claude (Anthropic), opzionale
 				- `vector.service.js`: Gestione knowledge base vettoriale
 				- Altri: openmeteo, stormglass, wwo services
 			- `lib/domain/`: Logica di business pura
@@ -331,7 +335,7 @@ Strategia di caching a tre livelli per performance estreme:
 				- `formatter.js`, `geo.utils.js`, `wmo_code_converter.js`
 			- `api/`: Handler endpoint REST semplici
 				- Base: `autocomplete.js`, `reverse-geocode.js`, `analyze-day-fallback.js`
-				- **Advanced v7.2 (NUOVO)**: `query-natural-language.js`, `recommend-species.js`
+				- **Advanced v7.2**: `query-natural-language.js`, `recommend-species.js`
 			- `tools/`: Script CI/CD
 				- `data-pipeline.js`: Pipeline aggiornamento KB
 			- `server.js`: Entry point principale (inizializza MCP Client)
@@ -339,21 +343,26 @@ Strategia di caching a tre livelli per performance estreme:
 			- `knowledge_base.json`: Database vettoriale flat-file
 
 		- Le rotte sono state specializzate:
-			- `/api/get-analysis`: Endpoint primario, ultra-leggero, solo per il controllo della cache.
+			- `/api/get-analysis`: Endpoint primario, ultra-leggero, per il controllo della `analysisCache`.
 			- `/api/analyze-day-fallback`: Endpoint secondario per la generazione on-demand (DELEGA A MCP `analyze_with_best_model`).
-			- `/api/query`: - Endpoint conversazionale (DELEGA A MCP `natural_language_forecast`).
-			- `/api/recommend-species`: - Endpoint raccomandazioni specie (DELEGA A MCP `recommend_for_species`).
+			- `/api/query`: Endpoint conversazionale (DELEGA A MCP `natural_language_forecast`).
+			- `/api/recommend-species`: Endpoint raccomandazioni specie (DELEGA A MCP `recommend_for_species`).
 
 	* Frontend (pesca_app):
-		- La struttura modulare ora implementa una chiara separazione dei compiti (Data Layer, Caching Layer, UI Layer).
-		- **Gestione Stato e Dati ("Offline-First"):**
-			- `forecast_screen.dart`: Implementa logica "Offline-First" gestendo manualmente lo stato. Al caricamento, interroga prima `CacheService`. In caso di CACHE MISS, delega la chiamata di rete all'`ApiService`, per poi salvare il risultato e aggiornare la UI.
-			- `cache_service.dart` (chiave): Servizio che centralizza tutta la logica di persistenza locale (lettura, scrittura, scadenza TTL) tramite Hive.
-			- `api_service.dart` (chiave): Aderisce al Principio di Singola Responsabilità, gestendo **solo** le chiamate di rete e restituendo dati grezzi.
-			- `analyst_card.dart` (chiave): Componente autonomo che implementa propria logica "Offline-First", interrogando prima la cache di Hive per l'analisi e chiamando la rete solo se necessario.
+		- La struttura modulare è stata rifattorizzata seguendo un pattern **MVVM (Model-View-ViewModel)** per una chiara separazione delle responsabilità.
+		- **Gestione Stato e Dati (Architettura MVVM):**
+			- `viewmodels/` (chiave): Contiene i "cervelli" della UI.
+				- `forecast_viewmodel.dart`: Gestisce lo stato della schermata principale, orchestrando `CacheService` e `ApiService` per le previsioni.
+				- `analysis_viewmodel.dart`: Gestisce lo stato dell'analisi AI, implementando la complessa logica a 3 fasi (cache locale -> cache backend -> fallback) e notificando la `AnalysisView` dei cambiamenti.
+			- `services/` (chiave): Livello di accesso ai dati.
+				- `cache_service.dart`: Centralizza tutta la logica di persistenza locale (Hive). **Ora supporta il salvataggio e il recupero dei metadati dell'analisi AI** (es. `modelUsed`).
+				- `api_service.dart`: Gestisce **solo** le chiamate di rete, restituendo i dati grezzi dal backend senza logica di business.
+			- `widgets/` (chiave - Layer "View"):
+				- `analyst_card.dart`: Diventato un "contenitore" stateless. La sua unica responsabilità è creare e fornire l' `AnalysisViewModel` al suo figlio, `AnalysisView`.
+				- `analysis_view.dart`: La "vista" pura dell'analisi AI. Si occupa solo del rendering, ascoltando i cambiamenti del `ViewModel` per mostrare lo stato corretto (loading, success, error) e **il badge dinamico del modello AI utilizzato**.
 		- **Widgets Potenziati ("Premium Plus"):**
-			- `main_hero_module.dart`: Usa `Stack` per visualizzare la card di analisi in un layer sovrapposto, con trigger animato e `BackdropFilter`.
-			- `analysis_skeleton_loader.dart`: Fornisce feedback visivo immediato con animazione "shimmer" durante l'attesa del fallback.
+			- `main_hero_module.dart`: Usa `Stack` per visualizzare la `AnalystCard` in un layer sovrapposto, con trigger animato e `BackdropFilter`.
+			- `analysis_skeleton_loader.dart`: Fornisce feedback visivo "shimmer" durante l'attesa del fallback.
 
   
 ---
@@ -941,32 +950,35 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 | 	|-- RunnerTests
 | 	|-- .gitignore
 |-- lib/ # Cuore dell'applicazione. Contiene tutto il codice sorgente Dart.
-| 	|-- controllers/ # Contiene i "cervelli" della nostra UI (Pattern: ViewModel/Controller). Questi oggetti incapsulano la logica di stato e di business, disaccoppiandola completamente dalla logica di presentazione dei widget.
-| 	| 	|-- forecast_controller.dart # [CHIAVE-ARCHITETTURA] Il gestore dello stato per la schermata principale. Mantiene i dati delle previsioni (_forecastData), lo stato di caricamento (_isLoading) e gli errori (_errorMessage). Espone metodi (initializeForecast, fetchAndLoadForecast) per orchestrare CacheServiceeApiService, notificando la UI dei cambiamenti tramite il pattern ChangeNotifier.
-| 	|-- models/ # Definisce le strutture dati (POJO/PODO).
-| 	| 	|-- forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca. E' il contratto tra FE e BE e l'unità di informazione salvata nella cache. 
-| 	|-- screens/ # Componenti di primo livello che rappresentano un'intera schermata. 
-| 	| 	|-- forecast_screen.dart # Ora è un "Container" leggero. La sua responsabilità principale è inizializzare e "possedere" i controller (ForecastController, PageController) e gestire lo stato degli elementi che vivono al di sopra della UI principale (gli Overlay come SearchOverlay e AnalystCard). Delega l'intera costruzione del corpo della UI al widget ForecastView
-| 	|-- services/ # Moduli dedicati alle interazioni con sistemi esterni.
-| 	| 	|-- api_service.dart # Il "Data Layer" di rete. Aderisce al Principio di Singola Responsabilità: il suo UNICO compito è eseguire chiamate HTTP al backend (previsioni, analisi AI, GPS) e restituire risposte grezze (JSON o stringhe), senza alcuna conoscenza della logica di caching o di parsing dei dati.
-| 	|-- cache_service.dart # [CHIAVE-ARCHITETTURA] Il "Cervello della Cache". Centralizza TUTTA la logica di persistenza locale tramite Hive. Espone metodi per salvare e recuperare dati validi (getValidForecast, getValidAnalysis), gestendo internamente la logica di scadenza (TTL - Time To Live) e il parsing dei JSON in oggetti ForecastData. 
-| 	|-- utils/ # Funzioni helper pure, stateless e riutilizzabili. 
-| 	|-- weather_icon_mapper.dart # Traduttore di codici meteo (WMO, WWO) e stringhe in IconData e Color, garantendo consistenza visiva.
-| 	|-- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
-| 	|	|-- analyst_card.dart # [CHIAVE-AI] Widget stateful autonomo che orchestra la visualizzazione dell'analisi AI con logica "Offline-First". Al suo avvio, interroga il CacheService. In caso di CACHE MISS, chiama l'ApiService per i dati di rete, li salva in cache e poi li visualizza, gestendo internamente i propri stati di caricamento, successo ed errore.
-| 	| 	|-- analysis_skeleton_loader.dart # [CHIAVE-UX] Componente "Premium Plus" che mostra un placeholder animato (effetto "shimmer") durante l'attesa dell'analisi di fallback, migliorando la percezione della performance.
-|   |	|-- fishing_score_indicator.dart # Dataviz specializzato. Visualizza il pescaScore aggregato tramite un set di icone-amo stilizzate, indicando a colpo d'occhio il potenziale di pesca.
-|	|   |-- forecast_page.dart # Un componente di presentazione puro che renderizza il contenuto di una singola giornata di previsione. Mostra la SliverAppBar dinamica e assembla i vari moduli (MainHeroModule, HourlyForecast, WeeklyForecast) in una CustomScrollView. È completamente stateless per quanto riguarda la logica di business.
-| 	| 	|-- forecast_view.dart # Il "corpo" visivo principale della ForecastScreen. È un widget stateless che ascolta i cambiamenti del ForecastControllere si ricostruisce di conseguenza, mostrando lo stato di caricamento, l'errore o ilPageViewcon leForecastPage` effettive. Incapsula tutta la logica di layout della schermata.
-| 	| 	|-- glassmorphism_card.dart # Il "pilastro" del nostro Design System di Profondita'. Widget riutilizzabile che crea un pannello con effetto vetro smerigliato (BackdropFilter), fondamentale per la gerarchia visiva.
-| 	|   |-- hourly_forecast.dart # Widget tabellare ad alta densita' di informazioni. Mostra le previsioni ora per ora con logica di "Heatmap" dinamica (colori caldi/freddi) per vento, onde e umidita', e animazioni a cascata.
-| 	| 	|-- location_services_dialog.dart # Gestore di permessi. Dialogo standardizzato per guidare l'utente nell'attivazione dei servizi di localizzazione quando sono disabilitati.
-| 	|   |-- main_hero_module.dart # Il "biglietto da visita" della schermata. E' il componente principale che mostra i dati salienti (localita', temperatura) e funge da "host" per il trigger della feature AI (l'icona _PulsingIcon), gestendo l'attivazione dell'overlay "Modal Focus".
-| 	| 	|-- score_chart_dialog.dart # Dataviz interattivo. Mostra un dialogo modale con un grafico a linee (fl_chart) per l'andamento orario del pescaScore.
-| 	|	|-- score_details_dialog.dart # Spiegazione del "perche'". Dialogo che mostra i fattori positivi/negativi (reasons) che hanno contribuito a un determinato punteggio orario.
-| 	| 	|-- search_overlay.dart # Motore di ricerca UI. Un layer sovrapposto che gestisce la ricerca di localita' tramite autocomplete e l'accesso rapido al GPS.
-| 	| 	|-- stale_data_dialog.dart # Gestore di fallback. Dialogo che avvisa l'utente quando l'app sta usando dati in cache obsoleti a causa di un errore di rete, offrendo una scelta.
-| 	|-- weekly_forecast.dart # Dataviz settimanale. Lista che mostra le previsioni aggregate per i giorni successivi, inclusi min/max di temperatura e il pescaScore medio giornaliero. | -- main.dart # Il punto di ingresso e orchestratore dei servizi di background. Inizializza l'app, inizializza e apre i "box" di Hive (forecastCache, analysisCache). Registra e pianifica il task di aggiornamento periodico in background tramite Workmanager, definendo il callbackDispatcher che verrà eseguito dal sistema operativo per mantenere la cache sempre fresca.
+|   |-- models/ # Definisce le strutture dati (POJO/PODO).
+|   |   |-- forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca.
+|   |-- screens/ # Componenti di primo livello che rappresentano un'intera schermata. 
+|   |   |-- forecast_screen.dart # "Container" leggero. La sua responsabilità è inizializzare e "possedere" i controller/viewmodel e gestire gli Overlay (SearchOverlay, AnalystCard).
+|   |-- services/ # Moduli dedicati alle interazioni con sistemi esterni.
+|   |   |-- api_service.dart # Il "Data Layer" di rete. Aderisce al Principio di Singola Responsabilità: il suo UNICO compito è eseguire chiamate HTTP al backend e restituire risposte grezze (JSON), senza logica di caching.
+|   |   |-- cache_service.dart # [CHIAVE-ARCHITETTURA] Il "Cervello della Cache". Centralizza TUTTA la logica di persistenza locale (lettura, scrittura, TTL) tramite Hive.
+|   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili. 
+|   |   |-- weather_icon_mapper.dart # Traduttore di codici meteo in icone e colori.
+|   |-- viewmodels/ # [NUOVO/RIFATTORIZZATO] Contiene i "cervelli" della nostra UI (Pattern: ViewModel). Incapsulano la logica di stato e di business, disaccoppiandola dalla UI.
+|   |   |-- forecast_viewmodel.dart # Il gestore dello stato per la schermata principale. Orchestra CacheService e ApiService.
+|   |   |-- analysis_viewmodel.dart # [NUOVO] Il "cervello" dell'analisi AI. Incapsula tutta la logica a 3 fasi (cache locale -> cache backend -> fallback) e gestisce lo stato (_currentState, _analysisText, _errorText, _cachedMetadata), notificando la AnalysisView dei cambiamenti.
+|   |-- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
+|   |   |-- analyst_card.dart # [RIFATTORIZZATO] Ora è un "contenitore" stateless estremamente semplice. La sua unica responsabilità è creare e fornire l'AnalysisViewModel alla AnalysisView tramite un ChangeNotifierProvider.
+|   |   |-- analysis_view.dart # [NUOVO] La "vista" pura dell'analisi AI. È uno StatelessWidget che ascolta i cambiamenti dell'AnalysisViewModel e si ricostruisce per mostrare lo stato appropriato (loading, success, error), senza contenere alcuna logica di business.
+|   |   |-- analysis_skeleton_loader.dart # [CHIAVE-UX] Placeholder animato ("shimmer") per l'analisi di fallback.
+|   |   |-- fishing_score_indicator.dart # Dataviz specializzato per il pescaScore.
+|   |   |-- forecast_page.dart # Componente di presentazione per una singola giornata di previsione.
+|   |   |-- forecast_view.dart # Il "corpo" visivo della ForecastScreen. Ascolta il ForecastViewModel e mostra lo stato di caricamento, errore o i dati.
+|   |   |-- glassmorphism_card.dart # Il "pilastro" del Design System. Widget riutilizzabile per l'effetto vetro.
+|   |   |-- hourly_forecast.dart # Widget tabellare per le previsioni orarie.
+|   |   |-- location_services_dialog.dart # Dialogo per la gestione dei permessi di localizzazione.
+|   |   |-- main_hero_module.dart # Componente principale che mostra i dati salienti e ospita il trigger per l'analisi AI.
+|   |   |-- score_chart_dialog.dart # Dataviz interattivo per il grafico del pescaScore.
+|   |   |-- score_details_dialog.dart # Dialogo che spiega i "reasons" di un punteggio orario.
+|   |   |-- search_overlay.dart # Layer UI per la ricerca di località.
+|   |   |-- stale_data_dialog.dart # Dialogo di fallback per dati in cache obsoleti.
+|   |   |-- weekly_forecast.dart # Dataviz per le previsioni settimanali. 
+|-- main.dart # Il punto di ingresso e orchestratore. Inizializza l'app, apre i "box" di Hive, e registra/pianifica il task di aggiornamento in background tramite Workmanager.
 |-- linux/ # Wrapper nativo Linux.
 | 	|-- flutter
 | 	|-- runner

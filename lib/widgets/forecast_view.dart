@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../controllers/forecast_controller.dart';
+import '../viewmodels/forecast_viewmodel.dart';
 import '../models/forecast_data.dart';
 import 'forecast_page.dart'; // Importiamo il nuovo file ForecastPage
 
