@@ -50,10 +50,11 @@ class ApiService {
 
   /// Recupera suggerimenti di località per l'autocomplete.
   Future<List<dynamic>> fetchAutocompleteSuggestions(String query) async {
-    final url =
-        Uri.parse('$_baseUrl/autocomplete?text=${Uri.encodeComponent(query)}');
+    final url = Uri.parse(
+      '$_baseUrl/autocomplete?text=${Uri.encodeComponent(query)}',
+    );
     try {
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      final response = await http.get(url).timeout(const Duration(seconds: 60));
       if (response.statusCode == 200) {
         final decodedBody = json.decode(response.body);
         if (decodedBody is List) return decodedBody;
@@ -92,10 +93,12 @@ class ApiService {
     // 3. Ottiene posizione e fa reverse geocoding
     Position position = await Geolocator.getCurrentPosition();
     final reverseUrl = Uri.parse(
-        '$_baseUrl/reverse-geocode?lat=${position.latitude}&lon=${position.longitude}');
+      '$_baseUrl/reverse-geocode?lat=${position.latitude}&lon=${position.longitude}',
+    );
     try {
-      final response =
-          await http.get(reverseUrl).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(reverseUrl)
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         final locationName =
@@ -117,7 +120,9 @@ class ApiService {
   /// [NUOVO] Controlla la cache del backend (endpoint Phantom).
   /// Ritorna una mappa con 'status', 'analysis' (se pronto) e 'metadata'.
   Future<Map<String, dynamic>> getAnalysisFromCache(
-      double lat, double lon) async {
+    double lat,
+    double lon,
+  ) async {
     try {
       final uri = Uri.parse('$_baseUrl/get-analysis');
       final response = await http
@@ -144,7 +149,9 @@ class ApiService {
   /// [NUOVO] Esegue il fallback per generare una nuova analisi on-demand.
   /// Ritorna una mappa con 'analysis' (Stringa Markdown) e 'metadata' (Map).
   Future<Map<String, dynamic>> generateAnalysisFallback(
-      double lat, double lon) async {
+    double lat,
+    double lon,
+  ) async {
     final uri = Uri.parse('$_baseUrl/analyze-day-fallback');
     try {
       // Inoltriamo lat/lon e l'API decide la query interna da usare.
@@ -155,7 +162,8 @@ class ApiService {
             body: json.encode({'lat': lat, 'lon': lon}),
           )
           .timeout(
-              const Duration(seconds: 45)); // Timeout lungo per la generazione
+            const Duration(seconds: 45),
+          ); // Timeout lungo per la generazione
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body) as Map<String, dynamic>;
@@ -164,14 +172,17 @@ class ApiService {
           return result;
         }
         throw const ApiException(
-            'Risposta di fallback incompleta o malformata.');
+          'Risposta di fallback incompleta o malformata.',
+        );
       }
       throw ApiException(
-          'Errore nella risposta di fallback: ${response.statusCode}');
+        'Errore nella risposta di fallback: ${response.statusCode}',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
-          'Errore inatteso durante il fallback: ${e.toString()}');
+        'Errore inatteso durante il fallback: ${e.toString()}',
+      );
     }
   }
 
