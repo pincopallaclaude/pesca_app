@@ -31,7 +31,7 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/forecast?location=$location'))
-          .timeout(const Duration(seconds: 20)); // Timeout per il meteo
+          .timeout(const Duration(seconds: 60)); // Timeout per il meteo
 
       if (response.statusCode == 200) {
         print('[ApiService] Raw JSON ricevuto dal backend.');
@@ -96,9 +96,8 @@ class ApiService {
       '$_baseUrl/reverse-geocode?lat=${position.latitude}&lon=${position.longitude}',
     );
     try {
-      final response = await http
-          .get(reverseUrl)
-          .timeout(const Duration(seconds: 10));
+      final response =
+          await http.get(reverseUrl).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         final locationName =
