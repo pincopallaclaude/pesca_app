@@ -165,7 +165,7 @@ class AnalysisView extends StatelessWidget {
     if (metadata != null && metadata['modelUsed'] != null) {
       final model = metadata['modelUsed'] as String;
       String formattedModelName;
-      if (model.contains('gemini-1.5-flash'))
+      if (model.contains('gemini-2.5-flash'))
         formattedModelName = 'Gemini 1.5 Flash';
       else if (model.contains('claude'))
         formattedModelName = 'Claude 3 Sonnet';

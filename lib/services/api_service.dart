@@ -2,7 +2,9 @@
 
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io'; // Import necessario per HttpClient
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart'; // Import necessario per IOClient
 import 'package:geolocator/geolocator.dart';
 
 /// Eccezione specifica per problemi con i servizi di localizzazione
@@ -23,15 +25,30 @@ class ApiException implements Exception {
 
 class ApiService {
   // L'URL base del backend
-  final String _baseUrl = 'https://pesca-api-v5.fly.dev/api';
+  // --- USA L'URL DI RENDER ---
+  final String _baseUrl = 'https://pesca-api.onrender.com/api';
+
+  // --- NUOVA LOGICA: CLIENT HTTP PERSONALIZZATO ---
+
+  /// Crea un client HTTP con un timeout di connessione personalizzato.
+  /// Utile per gestire i "cold start" dei servizi serverless come Render.
+  http.Client _createCustomClient({int timeoutSeconds = 60}) {
+    final ioc = HttpClient();
+    // Imposta il timeout a un livello basso, per stabilire la connessione
+    ioc.connectionTimeout = Duration(seconds: timeoutSeconds);
+    return IOClient(ioc);
+  }
+
+  // --- FINE NUOVA LOGICA ---
 
   /// Recupera il JSON delle previsioni meteo.
   Future<String> fetchForecastJson(String location) async {
     print("[ApiService] Inizio chiamata di rete per: $location");
+    final client = _createCustomClient(); // Usa il client custom
     try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl/forecast?location=$location'))
-          .timeout(const Duration(seconds: 60)); // Timeout per il meteo
+      final response = await client.get(
+        Uri.parse('$_baseUrl/forecast?location=$location'),
+      );
 
       if (response.statusCode == 200) {
         print('[ApiService] Raw JSON ricevuto dal backend.');
@@ -39,10 +56,12 @@ class ApiService {
       }
       throw ApiException('Errore del server: ${response.statusCode}');
     } on TimeoutException {
-      throw const ApiException('Timeout di rete (20s) superato.');
+      throw const ApiException('Timeout di rete (60s) superato.');
     } catch (e) {
       if (e is ApiException) rethrow;
       throw const ApiException('Errore di rete o server non disponibile.');
+    } finally {
+      client.close(); // Chiudi sempre il client
     }
   }
 
@@ -50,54 +69,50 @@ class ApiService {
 
   /// Recupera suggerimenti di località per l'autocomplete.
   Future<List<dynamic>> fetchAutocompleteSuggestions(String query) async {
+    final client = _createCustomClient();
     final url = Uri.parse(
       '$_baseUrl/autocomplete?text=${Uri.encodeComponent(query)}',
     );
     try {
-      final response = await http.get(url).timeout(const Duration(seconds: 60));
+      final response = await client.get(url);
       if (response.statusCode == 200) {
         final decodedBody = json.decode(response.body);
         if (decodedBody is List) return decodedBody;
       }
       return [];
     } catch (e) {
-      // Ignoriamo gli errori di rete per l'autocomplete e ritorniamo una lista vuota
       print('[ApiService] Errore Autocomplete: ${e.toString()}');
       return [];
+    } finally {
+      client.close();
     }
   }
 
   /// Ottiene la posizione GPS corrente e la converte in nome località.
   Future<Map<String, String>> getCurrentGpsLocation() async {
+    // La logica GPS non cambia
     bool serviceEnabled;
     LocationPermission permission;
-
-    // 1. Controllo servizi di localizzazione
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw const LocationServicesDisabledException();
-    }
-
-    // 2. Controllo permessi
+    if (!serviceEnabled) throw const LocationServicesDisabledException();
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw Exception('Permesso di localizzazione negato.');
-      }
+      if (permission == LocationPermission.denied)
+        throw Exception('Permesso negato.');
     }
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception('Permessi di localizzazione negati permanentemente.');
-    }
+    if (permission == LocationPermission.deniedForever)
+      throw Exception('Permessi negati permanentemente.');
 
-    // 3. Ottiene posizione e fa reverse geocoding
     Position position = await Geolocator.getCurrentPosition();
+
+    // La chiamata di rete ora usa il client custom
+    final client = _createCustomClient(
+        timeoutSeconds: 20); // Timeout più breve per il reverse geocoding
     final reverseUrl = Uri.parse(
-      '$_baseUrl/reverse-geocode?lat=${position.latitude}&lon=${position.longitude}',
-    );
+        '$_baseUrl/reverse-geocode?lat=${position.latitude}&lon=${position.longitude}');
     try {
-      final response =
-          await http.get(reverseUrl).timeout(const Duration(seconds: 10));
+      final response = await client.get(reverseUrl);
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         final locationName =
@@ -111,80 +126,62 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Errore di rete durante la ricerca della località.');
+    } finally {
+      client.close();
     }
   }
 
   // --- Funzioni per l'Analisi AI (Phantom/Fallback) ---
 
-  /// [NUOVO] Controlla la cache del backend (endpoint Phantom).
-  /// Ritorna una mappa con 'status', 'analysis' (se pronto) e 'metadata'.
   Future<Map<String, dynamic>> getAnalysisFromCache(
-    double lat,
-    double lon,
-  ) async {
+      double lat, double lon) async {
+    final client =
+        _createCustomClient(timeoutSeconds: 10); // Timeout breve per la cache
     try {
       final uri = Uri.parse('$_baseUrl/get-analysis');
-      final response = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'lat': lat, 'lon': lon}),
-          )
-          .timeout(const Duration(seconds: 5)); // Timeout breve per la cache
+      final response = await client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'lat': lat, 'lon': lon}),
+      );
 
-      // Accetta 200 (HIT) o 202 (MISS/PENDING)
       if (response.statusCode == 200 || response.statusCode == 202) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
       throw ApiException('Errore controllo cache: ${response.statusCode}');
     } catch (e) {
       print('[ApiService] Errore getAnalysisFromCache: ${e.toString()}');
-      // In caso di errore (timeout, rete, etc.), ritorna 'pending'
-      // per far scattare il fallback nel BLoC o ViewModel.
       return {'status': 'pending'};
+    } finally {
+      client.close();
     }
   }
 
-  /// [NUOVO] Esegue il fallback per generare una nuova analisi on-demand.
-  /// Ritorna una mappa con 'analysis' (Stringa Markdown) e 'metadata' (Map).
   Future<Map<String, dynamic>> generateAnalysisFallback(
-    double lat,
-    double lon,
-  ) async {
+      double lat, double lon) async {
+    final client = _createCustomClient(
+        timeoutSeconds: 45); // Timeout lungo per la generazione AI
     final uri = Uri.parse('$_baseUrl/analyze-day-fallback');
     try {
-      // Inoltriamo lat/lon e l'API decide la query interna da usare.
-      final response = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'lat': lat, 'lon': lon}),
-          )
-          .timeout(
-            const Duration(seconds: 45),
-          ); // Timeout lungo per la generazione
+      final response = await client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'lat': lat, 'lon': lon}),
+      );
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body) as Map<String, dynamic>;
-        // Verifichiamo che la risposta abbia i campi attesi
         if (result.containsKey('analysis') && result.containsKey('metadata')) {
           return result;
         }
-        throw const ApiException(
-          'Risposta di fallback incompleta o malformata.',
-        );
+        throw const ApiException('Risposta di fallback malformata.');
       }
-      throw ApiException(
-        'Errore nella risposta di fallback: ${response.statusCode}',
-      );
+      throw ApiException('Errore fallback: ${response.statusCode}');
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException(
-        'Errore inatteso durante il fallback: ${e.toString()}',
-      );
+      throw ApiException('Errore inatteso fallback: ${e.toString()}');
+    } finally {
+      client.close();
     }
   }
-
-  // --- Metodo Obsoleto Rimosso ---
-  // Il vecchio metodo fetchAnalysis è stato rimosso in quanto obsoleto.
 }

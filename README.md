@@ -13,12 +13,12 @@ L'applicazione è uno strumento avanzato di previsioni meteo-marine per la pesca
 	1.1 Architettura P.H.A.N.T.O.M. (Proactive Hyper-localized Awaited-knowledge Networked Targeting & Optimization Model): Un sistema AI che non attende la richiesta dell'utente, ma genera l'analisi in background non appena i dati meteo sono disponibili. Questo permette di fornire l'insight in modo istantaneo (<50ms) alla prima richiesta, migliorando drasticamente la User Experience.
 
 	1.2 Sistema RAG++ Potenziato: L'architettura RAG (Retrieval-Augmented Generation) è stata evoluta con tecniche avanzate per massimizzare la pertinenza e la qualità del contesto fornito all'AI:
-		- **Metadata Filtering:** Ricerche più veloci e precise filtrando i documenti per categoria (es. specie, tecnica) prima della ricerca semantica.
-		- **Hybrid Search:** Combinazione di ricerca vettoriale (per similarità concettuale) e ricerca testuale (per parole chiave esatte) per ottenere il meglio di entrambi i mondi.
+		- **Metadata Filtering:** **(Roadmap)** Funzionalità prevista per filtrare i documenti per categoria (es. specie, tecnica). **Attualmente la ricerca opera sull'intera Knowledge Base.**
+		- **Hybrid Search:** La ricerca si basa su un approccio **vettoriale puro** per similarità concettuale, potenziato da un re-ranking di precisione.
 		- **Context Window Optimization:** L'AI riceve un contesto più ampio (titolo + snippet) invece del solo snippet, migliorando la coerenza delle risposte.
-		- **Cross-Encoder Re-Ranking:** Dopo il recupero iniziale dei candidati da ChromaDB tramite ricerca ibrida/vettoriale, un secondo modello AI specializzato (un cross-encoder, es. BAAI/bge-reranker-large) riordina questi risultati. Questo "secondo parere" di precisione analizza la pertinenza tra la query e ogni documento in modo molto più approfondito, garantendo che i risultati finali passati al LLM siano i più rilevanti in assoluto.
+		- **Cross-Encoder Re-Ranking:** Dopo il recupero iniziale dei candidati da ChromaDB, un secondo modello AI specializzato (un cross-encoder, es. BAAI/bge-reranker-large) riordina questi risultati. Questo "secondo parere" di precisione analizza la pertinenza tra la query e ogni documento in modo molto più approfondito, garantendo che i risultati finali passati al LLM siano i più rilevanti in assoluto.
 
-	1.3 Database Vettoriale con ChromaDB: Abbandono del flat-file JSON in favore di ChromaDB, un vero database vettoriale che gira come processo server-side. Questo garantisce scalabilità, persistenza dei dati tra i deploy (tramite Fly.io Volumes) e performance elevate anche con una Knowledge Base in crescita.
+	1.3 Database Vettoriale con ChromaDB: Abbandono del flat-file JSON in favore di ChromaDB, un vero database vettoriale che gira come processo server-side. Questo garantisce scalabilità, persistenza dei dati tra i deploy (tramite **Render Persistent Disks**) e performance elevate anche con una Knowledge Base in crescita.
 
 	1.4 Knowledge Base Auto-Aggiornante (CI/CD): La KB viene aggiornata in modo completamente automatico tramite una pipeline GitHub Actions che si attiva alla modifica di `sources.json`, rendendo l'AI costantemente "allenabile".
 
@@ -77,66 +77,60 @@ Il pescaScore e' evoluto da un valore statico giornaliero a una metrica dinamica
 ### 3. ORGANIZZAZIONE DEI MICROSERVIZI (BACKEND)
 ---
 
-    3.A - ENDPOINT REST TRADIZIONALI
-        - `/api/forecast`: Restituisce le previsioni complete e innesca l'analisi AI proattiva.
-        - `/api/update-cache`: Endpoint dedicato per l'aggiornamento proattivo della cache meteo via Cron Job.
-        - `/api/autocomplete`: Fornisce suggerimenti di località.
-        - `/api/reverse-geocode`: Esegue la geolocalizzazione inversa.
-        - `/api/query`: Endpoint conversazionale per query in linguaggio naturale.
-        - `/api/recommend-species`: Endpoint per raccomandazioni ultra-specifiche per specie target.
+	3.A - ENDPOINT REST TRADIZIONALI
+		- `/api/forecast`: Restituisce le previsioni complete e innesca l'analisi AI proattiva.
+		- `/api/update-cache`: Endpoint dedicato per l'aggiornamento proattivo della cache meteo via Cron Job.
+		- `/api/autocomplete`: Fornisce suggerimenti di località.
+		- `/api/reverse-geocode`: Esegue la geolocalizzazione inversa.
+		- `/api/query`: Endpoint conversazionale per query in linguaggio naturale.
+		- `/api/recommend-species`: Endpoint per raccomandazioni ultra-specifiche per specie target.
+		- **`/admin/inspect-db` (NUOVO): Endpoint di diagnostica protetto per ispezionare lo stato della collection ChromaDB.**
 
-    3.B - SISTEMA AI: "INSIGHT DI PESCA" (v8.0 - RAG con ChromaDB)
-        L'architettura RAG è stata migrata da un flat-file a un vero database vettoriale, ChromaDB, per garantire scalabilità e performance.
+	3.B - SISTEMA AI: "INSIGHT DI PESCA" (v8.1 - RAG con ChromaDB)
+		L'architettura RAG è stata migrata da un flat-file a un vero database vettoriale, ChromaDB, per garantire scalabilità e performance.
 
-        *   **Flusso P.H.A.N.T.O.M.:**
-            Il flusso di analisi proattiva (P.H.A.N.T.O.M.) rimane una feature centrale, ma ora si appoggia a un sistema RAG più performante per generare analisi di qualità superiore in background.
+		*   **Flusso P.H.A.N.T.O.M.:**
+			Il flusso di analisi proattiva (P.H.A.N.T.O.M.) rimane una feature centrale, ma ora si appoggia a un sistema RAG più performante per generare analisi di qualità superiore in background.
 
-        *   **Knowledge Base (ChromaDB):**
-            - **Tecnologia:** Database vettoriale **ChromaDB**. Gira come un processo server-side (`chroma run...`) all'interno dello stesso container dell'app, orchestrato da `fly.toml`. I dati sono persistenti grazie a un volume Fly.io.
-            - **Contenuti:** La collection `fishing_knowledge` contiene i documenti e i metadati strutturati (`species`, `technique`, etc.). L'embedding (vettorizzazione) è gestito da una `embeddingFunction` custom basata su Gemini, configurata direttamente nel servizio.
-            - **Flusso di Aggiornamento Dati:**
-                1.  **CI/CD (GitHub Actions):** La modifica a `sources.json` innesca una pipeline che genera il file `knowledge_base.json` e lo committa nel repository. Questo file funge da "source of truth".
-                2.  **Migrazione Manuale (Post-Deploy):** Dopo un deploy, un operatore esegue lo script `tools/migrate-to-chromadb.js` via `fly ssh` per leggere il `knowledge_base.json` e popopolare/aggiornare il database ChromaDB.
+		*   **Knowledge Base (ChromaDB):**
+			- **Tecnologia:** Database vettoriale **ChromaDB**. Gira come un processo server-side (`chroma run...`) all'interno dello stesso container dell'app, orchestrato dalla piattaforma di hosting **Render**. I dati sono persistenti grazie a un **Render Persistent Disk**.
+			- **Contenuti:** La collection `fishing_knowledge` contiene i documenti. **(Roadmap: arricchimento con metadati strutturati come `species`, `technique`, etc.)**. L'embedding è gestito da una `embeddingFunction` custom basata su Gemini.
+			- **Flusso di Aggiornamento Dati:**
+				1.  **CI/CD (GitHub Actions):** La modifica a `sources.json` innesca una pipeline che genera il file `knowledge_base.json` e lo committa nel repository. Questo file funge da "source of truth".
+				2.  **Migrazione Automatica (On-Boot):** All'avvio del server, uno script controlla se la collection ChromaDB è vuota. In tal caso, esegue automaticamente la migrazione leggendo `knowledge_base.json` per popolare il database, **eliminando la necessità di interventi manuali**.
 
-    3.C - INFRASTRUTTURA MCP E DEPLOYMENT (v8.0)
-        L'architettura è stata aggiornata per supportare il co-processo di ChromaDB, mantenendo l'orchestrazione AI via MCP.
+	3.C - INFRASTRUTTURA MCP E DEPLOYMENT (v8.1)
+		L'architettura è stata adattata per il deployment su Render, mantenendo l'orchestrazione AI via MCP.
 
-        *   **Architettura di Deployment (Fly.io Single Process with Background Task):**
-            - **`fly.toml`:** Configura un singolo processo (`app`) che esegue un comando complesso.
-            - **Comando di Avvio:** Il comando `'/bin/sh -c 'chroma run ... & exec node server.js''` avvia prima il server ChromaDB in background (`&`) e poi l'applicazione Node.js in foreground (`exec`), garantendo che entrambi siano attivi e che il container rimanga in esecuzione.
+		*   **Architettura di Deployment (Render):**
+			- **`render.yaml` (concettuale):** La configurazione di Render definisce un servizio web che avvia il container.
+			- **Comando di Avvio:** Un comando di avvio personalizzato (`start.sh`) gestisce l'avvio concorrente del server ChromaDB in background e dell'applicazione Node.js in foreground.
 
-        *   **Componenti MCP (Logica Interna Aggiornata):**
-            L'architettura MCP rimane il cuore dell'orchestrazione AI, ma i tool ora interrogano ChromaDB.
-            
-            1.  **MCP Server (`mcp/server.js`):**
-                - Server MCP dedicato che espone tool e resource per operazioni AI.
-                - Comunica via Stdio Transport con il client.
-                - Registra 8 tool totali (4 base + 4 advanced).
-            
-            2.  **MCP Client (`lib/services/mcp-client.service.js`):**
-                - Bridge tra Express e MCP Server.
-                - Gestisce connessione, retry logic (3 tentativi) e timeout (10s).
-            
-            3.  **Tools MCP - Advanced v7.2 (Logica Interna Aggiornata a v8.0):**
-                - `analyze_with_best_model` e `recommend_for_species`: La loro logica interna è stata aggiornata. Non calcolano più similarità, ma costruiscono query testuali e filtri di metadati da passare a `chromadb.service.js`. Dopo aver ricevuto i risultati iniziali, li inoltrano a `reranker.service.js` per un riordino di precisione prima di costruire il contesto finale per l'LLM.
-            
-            4.  **Resources MCP (`mcp/resources/`):**
-                - `knowledge_base`: Concettualmente, ora rappresenta l'accesso alla collection di ChromaDB.
+		*   **Componenti MCP (Logica Interna Aggiornata):**
+			L'architettura MCP rimane il cuore dell'orchestrazione AI, ma i tool ora interrogano ChromaDB.
+			
+			1.  **MCP Server (`mcp/server.js`):** Un mock server simulato tramite `mcp-client.service.js` che esegue i tool in-process, eliminando la complessità dello Stdio Transport per questo progetto.
+			
+			2.  **MCP Client (`lib/services/mcp-client.service.js`):** Un mock che fa da bridge tra Express e i tool, chiamando direttamente le funzioni locali.
+			
+			3.  **Tools MCP:**
+				- `analyze_with_best_model` e `recommend_for_species`: La loro logica interna chiama direttamente `chromadb.service.js` per il recupero dei dati e poi `reranker.service.js` per il riordino di precisione.
+			
+			4.  **Resources MCP (`mcp/resources/`):**
+				- `knowledge_base`: Concettualmente, rappresenta l'accesso alla collection di ChromaDB.
 
-        *   **Services Aggiuntivi (`lib/services/`):**
-            - **`chromadb.service.js` (NUOVO v8.0):** Incapsula tutta la logica di connessione, interrogazione (query) e gestione (add/reset) della collection ChromaDB. Definisce la `embeddingFunction` custom per Gemini.
-            - **`reranker.service.js` (NUOVO v8.1):** Incapsula la logica di chiamata al modello cross-encoder su Hugging Face. Riceve una query e una lista di documenti e restituisce la lista riordinata per pertinenza.
-            - **`vector.service.js` (RIFATTORIZZATO v8.0):** È diventato un semplice "mediatore". Riceve le richieste dai tool MCP e le inoltra a `chromadb.service.js`.
-            - `mistral.service.js`: Wrapper API Mistral AI per analisi complesse.
-            - `claude.service.js`: Wrapper API Claude (Anthropic) come opzione premium.
+		*   **Services Aggiuntivi (`lib/services/`):**
+			- **`chromadb.service.js`:** Incapsula tutta la logica di connessione, interrogazione (query) e gestione (add) della collection ChromaDB.
+			- **`reranker.service.js`:** Incapsula la logica di chiamata al modello cross-encoder su Hugging Face.
+			- **`vector.service.js` (OBSOLETO): Non più utilizzato. I tool chiamano `chromadb.service.js` direttamente.**
+			- `mistral.service.js`, `claude.service.js`, `gemini.service.js`: Wrapper per le API dei rispettivi LLM.
 
-        *   **Ciclo di Vita (Aggiornato):**
-            1.  **Deploy:** Fly.io avvia il container.
-            2.  **Avvio Processi:** Il comando in `fly.toml` avvia `chroma` e `node`.
-            3.  **Inizializzazione App:** `server.js` attende la disponibilità di ChromaDB (con un loop di retry).
-            4.  **Connessione DB:** `initializeChromaDB()` stabilisce la connessione.
-            5.  **Connessione MCP:** `mcpClient.connect()` si avvia.
-            6.  **Server Pronto:** L'app Express inizia ad ascoltare le richieste.
+		*   **Ciclo di Vita (Aggiornato):**
+			1.  **Deploy:** Render avvia il container con il nuovo codice.
+			2.  **Avvio Processi:** Lo script di avvio lancia `chroma` e `node`.
+			3.  **Inizializzazione App:** `server.js` si avvia, i servizi critici (ChromaDB, MCP) vengono inizializzati in background.
+			4.  **Controllo e Migrazione DB:** Il server controlla lo stato della collection ChromaDB ed esegue la migrazione se necessario.
+			5.  **Server Pronto:** L'app Express inizia ad ascoltare le richieste e a servire il traffico.
 
 
 ---
@@ -173,28 +167,25 @@ Strategia di caching a tre livelli per performance estreme:
 		- Dati Premium (Solo Posillipo): Stormglass.io (corrente marina).
 
 	* Database Vettoriale:
-		- **ChromaDB:** Utilizzato come database vettoriale per la Knowledge Base. Gira come processo server-side all'interno del container Fly.io.
+		- **ChromaDB:** Utilizzato come database vettoriale per la Knowledge Base. Gira come processo server-side all'interno del container su **Render**.
 
 	* Servizi AI Utilizzati:
 		- **Google Gemini (via API):**
 			- Modello Generativo (`gemini-2.5-flash`): Per la generazione di testo delle analisi.
-			- Modello di Embedding (`text-embedding-004`): Utilizzato come `embeddingFunction` da ChromaDB per vettorizzare sia i documenti che le query.
+			- Modello di Embedding (`text-embedding-004`): Utilizzato per vettorizzare sia i documenti della KB che le query in tempo reale.
 		- **Mistral AI (Alternativa Gratuita per Complessità):**
 			- Modello: `open-mistral-7b`
 			- Uso: Analisi complesse/approfondite quando le condizioni meteo lo richiedono.
 		- **Claude (Anthropic) - Opzione Premium:**
 			- Modello: `claude-3-sonnet-20240229`
 			- Uso: Analisi di massima qualità per condizioni meteo estremamente complesse.
-		- **SerpApi:** Per l'acquisizione automatica della conoscenza da Google Search durante l'esecuzione della data pipeline.
+		- **SerpApi:** Per l'acquisizione automatica della conoscenza da Google Search durante l'esecuzione della data pipeline (CI/CD).
 		- **Hugging Face Inference API:**
 			- Modello: `BAAI/bge-reranker-large`
 			- Uso: Per il re-ranking di precisione (cross-encoder) dei risultati recuperati da ChromaDB, garantendo la massima pertinenza del contesto fornito all'LLM.
 
 	* Model Context Protocol (MCP):
-		- SDK: @modelcontextprotocol/sdk (v1.20.1)
-		- Transport: Stdio (comunicazione via child process)
-		- Server: Embedded in stesso processo Node.js
-		- Tool Count: 8 tool (la logica interna è stata aggiornata per usare ChromaDB)
+		- **Architettura:** L'applicazione utilizza un **mock del client MCP** (`mcp-client.service.js`) che esegue i tool AI direttamente in-process. Questo approccio mantiene la modularità concettuale di MCP (separazione tra "chiamante" e "tool") eliminando la complessità di un server e di un trasporto dedicati.
 
 	 
 
@@ -205,14 +196,14 @@ Strategia di caching a tre livelli per performance estreme:
 	- Backend (pesca-api):
 		- Ambiente: Node.js, Express.js.
 		- Database Vettoriale: **ChromaDB** (eseguito come processo server-side).
-		- Package AI: @google/generative-ai, @modelcontextprotocol/sdk, @anthropic-ai/sdk, @mistralai/sdk, **chromadb**, @huggingface/inference: latest.
-		- Architettura: MCP-Enhanced con server MCP embedded e Multi-Model Orchestration.
+		- Package AI: @google/generative-ai, @anthropic-ai/sdk, @mistralai/sdk, **axios** (per ChromaDB), @huggingface/inference: latest.
+		- Architettura: **Architettura a servizi modulare con un mock del client MCP** per l'orchestrazione dei tool AI (es. Multi-Model Orchestration).
 	- Frontend (pesca_app):
 		- Ambiente: Flutter, Dart.
 		- Package Chiave: geolocator, hive, hive_flutter, workmanager, fl_chart, flutter_staggered_animations, flutter_markdown, google_fonts.
 	- Version Control: GitHub.
-	- CI/CD: GitHub Actions per la generazione del file `knowledge_base.json`.
-	- Hosting & Deployment: Backend su **Fly.io** con architettura **multi-processo** (Node.js + ChromaDB) orchestrata via `fly.toml`. Persistenza dei dati garantita da **Fly.io Volumes**. Deploy automatico su push al branch `main`.
+	- CI/CD: GitHub Actions per la generazione automatica del file `knowledge_base.json` alla modifica di `sources.json`.
+	- Hosting & Deployment: Backend su **Render** con architettura **multi-processo** (Node.js + ChromaDB) orchestrata da uno script di avvio (`start.sh`). Persistenza dei dati garantita da **Render Persistent Disks**. Deploy automatico su push al branch `main`.
 
 
     
@@ -222,41 +213,39 @@ Strategia di caching a tre livelli per performance estreme:
     
 	* Backend (pesca-api):
 		- La struttura modulare è stata riorganizzata per supportare l'architettura con ChromaDB e Re-ranking (v8.1):
-			- `mcp/`: Infrastruttura Model Context Protocol. **La logica interna dei suoi tool (`analyze-with-best-model.js`, etc.) è stata aggiornata per invocare `reranker.service.js` dopo la chiamata a `chromadb.service.js`, completando il flusso RAG avanzato.**
+			- `mcp/`: Infrastruttura concettuale del Model Context Protocol. I **tool** al suo interno (`analyze-with-best-model.js`, etc.) chiamano direttamente i servizi `chromadb.service.js` e `reranker.service.js`.
 			- `lib/services/`: "Comunicatori" con API esterne e servizi interni.
-				- **`chromadb.service.js` (NUOVO v8.0):** Servizio centrale che gestisce ogni interazione con il database vettoriale ChromaDB (connessione, query, inserimento).
-				- **`reranker.service.js` (NUOVO v8.1):** Servizio dedicato che riceve i risultati da ChromaDB e li riordina tramite un modello cross-encoder su Hugging Face.
-				- **`vector.service.js` (RIFATTORIZZATO v8.0):** Ora è un semplice mediatore che inoltra le richieste a `chromadb.service.js`.
+				- **`chromadb.service.js`:** Servizio centrale che gestisce ogni interazione con il database vettoriale ChromaDB.
+				- **`reranker.service.js`:** Servizio dedicato che riceve i risultati da ChromaDB e li riordina tramite un modello cross-encoder su Hugging Face.
+				- **`vector.service.js` (OBSOLETO): Non più in uso.**
 				- `gemini.service.js`, `mistral.service.js`, `claude.service.js`: Wrapper API per i LLM.
-				- `mcp-client.service.js`, `proactive_analysis.service.js`: Servizi di orchestrazione.
-				- `geo.service.js`, `openmeteo.service.js`, etc.: Servizi per API esterne.
+				- `mcp-client.service.js`: Mock client che orchestra le chiamate ai tool.
+				- `proactive_analysis.service.js`: Servizio che avvia la generazione di analisi in background (P.H.A.N.T.O.M.).
 			- `lib/domain/`: Logica di business pura (invariata).
-			- `lib/utils/`: Funzionalità riutilizzabili.
-				- `logger.js` (NUOVO): Sistema di logging centralizzato.
-			- `api/`: Handler degli endpoint REST. La loro logica è stata aggiornata per includere la chiamata al sistema RAG.
+			- `lib/utils/`: Funzionalità riutilizzabili (`logger.js`, etc.).
+			- `api/`: Handler degli endpoint REST.
 			- `tools/`: Script di supporto e CI/CD.
-				- `data-pipeline.js`: Pipeline CI/CD che genera `knowledge_base.json`.
-				- **`migrate-to-chromadb.js` (NUOVO v8.0):** Script manuale per popolare ChromaDB leggendo `knowledge_base.json`.
-			- `server.js`: Entry point principale, ora gestisce il loop di retry per la connessione a ChromaDB.
-			- **`Dockerfile`, `fly.toml`, `start.sh` (CHIAVE v8.0):** Definiscono l'infrastruttura di deployment multi-processo su Fly.io.
-			- `knowledge_base.json`: Mantenuto come "source of truth" e backup per la migrazione a ChromaDB.
-
+				- `data-pipeline.js`: Script eseguito da GitHub Actions per generare `knowledge_base.json`.
+				- **`migrate-to-chromadb.js`:** Script che contiene la logica per popolare ChromaDB, **eseguito automaticamente all'avvio del server** se il database è vuoto.
+			- `server.js`: Entry point principale, che ora orchestra l'avvio asincrono dei servizi e la **migrazione automatica del database**.
+			- **`Dockerfile`, `start.sh`:** Definiscono l'infrastruttura di deployment multi-processo su **Render**.
+			- `knowledge_base.json`: Mantenuto come "source of truth" per la migrazione automatica a ChromaDB.
 
 	* Frontend (pesca_app):
-		- La struttura modulare è stata rifattorizzata seguendo un pattern **MVVM (Model-View-ViewModel)** per una chiara separazione delle responsabilità.
+		- La struttura modulare segue un pattern **MVVM (Model-View-ViewModel)** per una chiara separazione delle responsabilità.
 		- **Gestione Stato e Dati (Architettura MVVM):**
-			- `viewmodels/` (chiave): Contiene i "cervelli" della UI.
-				- `forecast_viewmodel.dart`: Gestisce lo stato della schermata principale, orchestrando `CacheService` e `ApiService` per le previsioni.
-				- `analysis_viewmodel.dart`: Gestisce lo stato dell'analisi AI, implementando la complessa logica a 3 fasi (cache locale -> cache backend -> fallback) e notificando la `AnalysisView` dei cambiamenti.
-			- `services/` (chiave): Livello di accesso ai dati.
-				- `cache_service.dart`: Centralizza tutta la logica di persistenza locale (Hive). **Ora supporta il salvataggio e il recupero dei metadati dell'analisi AI** (es. `modelUsed`).
-				- `api_service.dart`: Gestisce **solo** le chiamate di rete, restituendo i dati grezzi dal backend senza logica di business.
-			- `widgets/` (chiave - Layer "View"):
-				- `analyst_card.dart`: Diventato un "contenitore" stateless. La sua unica responsabilità è creare e fornire l' `AnalysisViewModel` al suo figlio, `AnalysisView`.
-				- `analysis_view.dart`: La "vista" pura dell'analisi AI. Si occupa solo del rendering, ascoltando i cambiamenti del `ViewModel` per mostrare lo stato corretto (loading, success, error) e **il badge dinamico del modello AI utilizzato**.
+			- `viewmodels/`: Contiene i "cervelli" della UI.
+				- `forecast_viewmodel.dart`: Gestisce lo stato della schermata principale.
+				- `analysis_viewmodel.dart`: Gestisce lo stato dell'analisi AI, implementando la logica a 3 fasi (cache locale -> cache backend -> fallback).
+			- `services/`: Livello di accesso ai dati.
+				- `cache_service.dart`: Centralizza tutta la logica di persistenza locale (Hive). Supporta il salvataggio dei metadati dell'analisi AI (es. `modelUsed`).
+				- `api_service.dart`: Gestisce solo le chiamate di rete, restituendo dati grezzi.
+			- `widgets/`: Componenti della "View" nel pattern MVVM.
+				- `analyst_card.dart`: Contenitore stateless che fornisce l' `AnalysisViewModel`.
+				- `analysis_view.dart`: La vista pura dell'analisi AI, che si aggiorna in base allo stato del `ViewModel`.
 		- **Widgets Potenziati ("Premium Plus"):**
-			- `main_hero_module.dart`: Usa `Stack` per visualizzare la `AnalystCard` in un layer sovrapposto, con trigger animato e `BackdropFilter`.
-			- `analysis_skeleton_loader.dart`: Fornisce feedback visivo "shimmer" durante l'attesa del fallback.
+			- `main_hero_module.dart`: Usa `Stack` per visualizzare la `AnalystCard` in un layer sovrapposto.
+			- `analysis_skeleton_loader.dart`: Fornisce feedback visivo "shimmer" durante l'attesa.
 
 
 ---
@@ -278,7 +267,7 @@ Strategia di caching a tre livelli per performance estreme:
 				  V        V        V        V      V
 +=============================================================================================================================+
 |                                                                                                                             |
-|                                FLY.IO - VM (Container Unico, 2 Processi)                                                    |
+|                                   RENDER - VM (Container Unico, 2 Processi)                                                 |
 |                                (Advanced AI Architecture v8.1 - ChromaDB + Re-Ranking)                                      |
 |                                                                                                                             |
 | +---------------------------------------------------------+   +-----------------------------------------------------------+ |
@@ -289,43 +278,37 @@ Strategia di caching a tre livelli per performance estreme:
 | |  | (+ Geocoding)              |                         |   |  +---------------------------------------+                | |
 | |  +-------------+--------------+                         |   |                                                           | |
 | |                | (async trigger)                        |   |                                                           | |
-| |                |                                        |   |                                                           | |
-| |                V                                        |   |  +---------------------------------------+                | |
-| |  +----------------------------+                         |   |  |     ChromaDB Server (Docker/Python)   |                | |
-| |  | proactive_analysis.service |                         |   |  | - Ascolta su localhost:8001           |                | |
-| |  +-------------+--------------+                         |   |  | - Usa /data/chroma (Volume Persist.)  |                | |
-| |                |                                        |   |  | - Gestisce vettori, indici, metadati  |                | |
-| |  +----------------------------+ (Legge Cache)           |   |  +------------------^--------------------+                | |
-| |  | /api/query & /recommend    |<------------------------+   |                     | (Connessione                        | |
-| |  | Logic (Delega a MCP)       |  (myCache)              |   |                     |  Locale)                            | |
-| |  +-------------+--------------+                         |   |                     |                                     | |
+| |                V                                        |   |                                                           | |
+| |  +----------------------------+                         |   |  +---------------------------------------+                | |
+| |  | proactive_analysis.service |                         |   |  |     ChromaDB Server (Python)          |                | |
+| |  +-------------+--------------+                         |   |  | - Ascolta su localhost:8001           |                | |
+| |                |                                        |   |  | - Usa /data/chroma (Disk Persist.)    |                | |
+| |  +----------------------------+ (Legge Cache)           |   |  | - Gestisce vettori, indici, metadati  |                | |
+| |  | /api/query & /recommend    |<------------------------+   |  +------------------^--------------------+                | |
+| |  | Logic (Delega a MCP)       |  (analysisCache)        |   |                     | (Connessione                        | |
+| |  +-------------+--------------+                         |   |                     |  Locale)                            | |
 | |                |                                        |   |                     |                                     | |
 | |                V                                        |   |                     |                                     | |
-| |  +----------------------------+                         |   |                     |                                     | |
-| |  |   MCP Client Service       |                         |   |                     |                                     | |
-| |  +-------------+--------------+                         |   |                     |                                     | |
-| |                | [Stdio Transport]                      |   |                     |                                     | |
-| |                V                                        |   |                     |                                     | |
 | |  +---------------------------------------------------+  |   |                     |                                     | |
-| |  |            MCP Server (embedded)                  |  |   |                     |                                     | |
+| |  |           MCP Client Service (Mock)               |  |   |                     |                                     | |
+| |  |  - Esegue i tool come chiamate di funzione locali |  |   |                     |                                     | |
+| |  +---------------------^-----------------------------+  |   |                     |                                     | |
+| |                        | (Chiama funzione Tool)         |   |                     |                                     | |
+| |                        V                                |   |                     |                                     | |
+| |  +---------------------------------------------------+  |   |                     |                                     | |
+| |  | Tool: analyze_with_best_model / recommend...    | |  |   |                     |                                     | |
 | |  | +-----------------------------------------------+ |  |   |                     |                                     | |
-| |  | | Tool: analyze_with_best_model / recommend...  | |  |   |                     |                                     | |
-| |  | +-------------------+-----------------------------+  |   |                     |                                     | |
-| |  |                     | (1. Delega Ricerca)            |   |                     |                                     | |
-| |  |                     V                                |   |                     |                                     | |
-| |  | +-----------------------------------------------+ |  |   |                     |                                     | |
-| |  | |      chromadb.service.js                      | |<-+-------------------------+                                     | |
-| |  | | - Recupera N candidati (es. 10) da ChromaDB   | |  |                                                               | |
+| |  | | 1. Chiama chromadb.service.js                 | |<-+-------------------------+                                     | |
+| |  | |    (Recupera N candidati da ChromaDB)         | |  |                                                               | |
 | |  | +---------------------^-------------------------+ |  |                                                               | |
-| |  |                       | (2. Passa i candidati)    |  |                                                               | |
-| |  |                       V                           |  |  +---------------------------------------------+              | |
-| |  | +-----------------------------------------------+ |  |  |       HUGGING FACE INFERENCE API            |              | |
-| |  | |      reranker.service.js   (NUOVO)            | |  |  | - Modello: BAAI/bge-reranker-large          |<---+         | |
-| |  | | - Chiama API esterna per riordinare i canditati | |<----(API Call)---------------------------------------+         | |
-| |  | +---------------------^-------------------------+ |  |  | - Restituisce punteggi di pertinenza        |    |         | |
-| |  |                       | (3. Ritorna risultati     |  |  +---------------------------------------------+    |         | |
-| |  |                       |     riordinati)           |  |                                                     |         | |
-| |  |                       +---------------------------+--+-----------------------------------------------------+         | |
+| |  |                       | (2. Passa i candidati)    |  |  +---------------------------------------------+              | |
+| |  |                       V                           |  |  |       HUGGING FACE INFERENCE API            |              | |
+| |  | +-----------------------------------------------+ |  |  | - Modello: BAAI/bge-reranker-large          |<---+         | |
+| |  | | 2. Chiama reranker.service.js                 | |<----(API Call)---------------------------------------+           | |
+| |  | |    (Riordina i candidati con modello esterno) | |  |  | - Restituisce punteggi di pertinenza        |    |         | |
+| |  | +---------------------^-------------------------+ |  |  +---------------------------------------------+    |         | |
+| |  |                       | (3. Costruisce prompt     |  |                                                     |         | |
+| |  |                       |     e chiama LLM)         |--+-----------------------------------------------------+         | |
 | |  +---------------------------------------------------+                                                                  | |
 | |                                                         |                                                               | |
 | +---------------------------------------------------------+   +-----------------------------------------------------------+ |
@@ -365,36 +348,27 @@ DEPLOYMENT & DEVELOPMENT
              V                                       |
 +--------------------------------+                   |          +----------------------------------------+
 |   GITHUB ACTIONS (Workflow)    |                   |          |         DOCKER DESKTOP (Locale)        |
-| (Esegue data-pipeline.js)      |                   |          |                                        |
-|                                |                   |          | +----------------------------------+   |
-| Pipeline (Genera JSON):        |                   |          | | Container: pesca-api-chroma-dev  |   |
-| 1. Read sources.json           |                   |          | | - Esegue ChromaDB Server         |   |
-| 2. SerpApi search              |                   |          | | - Espone porta 8001              |   |
-| 3. Costruisci 'parent_content' |                   |          | +------------------^---------------+   |
-| 4. Estrai Metadata             |                   |          |                    | (Connessione per  |
-| 5. Generate embeddings         |                   |          |                    |  test/migrazione) |
-| 6. Update knowledge_base.json  |                   |          |                    |                   |
-+--------------------------------+                   |          |                    |                   |
-             |                                       |          |                    |                   |
-             +------------------(Commit KB.json)-----+          |                    |                   |
-                                   |                            |                    |                   |
-                                   V                            |                    |                   |
-                        +-------------------------------------------------+          |                   |
-                        |           FLY.IO DEPLOYMENT                     |          |                   |
-                        | 1. Riavvio VM con nuovo codice                  |          |                   |
-                        | 2. Montaggio Volume Persistente (/data/chroma)  |          |                   |
-                        +----------------------+--------------------------+          |                   |
-                                               |                                     |                   |
-                                               V                                     |                   |  
-                                +----------------------------------------------------+                   |
-                                |            MIGRAZIONE DATI (Manuale)               |                   |
-                                |                                                    |                   |
-                                | 1. `fly ssh console` (o docker exec in locale)     |                   |
-                                | 2. `node tools/migrate...`                         |                   |
-                                | 3. Legge KB.json                                   |                   |
-                                | 4. Popola ChromaDB (su Fly.io o nel container) ----+                   |
-                                +----------------------------------------------------+                   |
-																										 |
+| (Esegue data-pipeline.js)      |                   |          | (Per testare ChromaDB in isolamento)   |
+|                                |                   |          |                                        |
+| Pipeline (Genera JSON):        |                   |          |                                        |
+| 1. Read sources.json           |                   |          |                                        |
+| 2. SerpApi search              |                   |          |                                        |
+| 3. Costruisci 'parent_content' |                   |          |                                        |
+| 4. Estrai Metadata (Roadmap)   |                   |          |                                        |
+| 5. Update knowledge_base.json  |                   |          |                                        |
++--------------------------------+                   |          |                                        |
+             |                                       |          |                                        |
+             +------------------(Commit KB.json)-----+          |                                        |
+                                   |                            |                                        |
+                                   V                            |                                        |
++-------------------------------------------------------------------------------------------------------+|
+|                                          RENDER DEPLOYMENT                                             |
+| 1. Riavvio VM con nuovo codice                                                                         |
+| 2. Montaggio Persistent Disk (/data/chroma)                                                            |
+| 3. Avvio server.js -> Controlla se ChromaDB è vuoto                                                    |
+| 4. Se vuoto, ESEGUE MIGRAZIONE AUTOMATICA (legge knowledge_base.json e popola il DB)                   |
++-------------------------------------------------------------------------------------------------------+|
+                                                                                                         |
 ==========================================================================================================
 
 
@@ -414,11 +388,9 @@ DEPLOYMENT & DEVELOPMENT
 		- @google/generative-ai: latest
 		- @mistralai/mistralai: latest
 		- @anthropic-ai/sdk: latest
-		- @modelcontextprotocol/sdk: 1.20.1
 		- @huggingface/inference: latest
-		- chromadb: ^1.8.1 **(NUOVO v8.0 - Database Vettoriale)**
-		- serpapi: latest
 		- axios: latest
+		- serpapi: latest
 		- dotenv: latest
 		- node-cache: latest
 		- cors: latest
@@ -440,16 +412,15 @@ DEPLOYMENT & DEVELOPMENT
 		- Analysis (Fallback): POST /api/analyze-day-fallback
 		- Natural Language Query: POST /api/query
 		- Species Recommendation: POST /api/recommend-species
-		- Cache Update: GET /api/update-cache
-		- Autocomplete: GET /api/autocomplete
-		- Reverse Geocode: GET /api/reverse-geocode
-		- Health Check: GET /health
+		- Cache Update (Cron): GET /api/update-cache
+		- Geocoding: GET /api/autocomplete, GET /api/reverse-geocode
+		- Health & Admin: GET /health, GET /admin/inspect-db
 
 	MCP TOOLS DISPONIBILI (Interni):
-		- La logica interna dei tool `analyze_with_best_model` e `recommend_for_species` è stata aggiornata per interrogare ChromaDB tramite `chromadb.service.js`.
+		- La logica interna dei tool come `analyze_with_best_model` orchestra le chiamate dirette ai servizi `chromadb.service.js` (per il recupero) e `reranker.service.js` (per il riordino).
 
 	MCP RESOURCES DISPONIBILI (Interni):
-		- `kb://fishing/knowledge_base`: Rappresenta l'accesso alla collection `fishing_knowledge` in ChromaDB.
+		- `kb://fishing/knowledge_base`: Rappresenta concettualmente l'accesso alla collection `fishing_knowledge` in ChromaDB.
 
 	LOCALITA DI TEST:
 		- Posillipo (Premium + Corrente): 40.813, 14.209
@@ -464,10 +435,10 @@ DEPLOYMENT & DEVELOPMENT
 		- Stormglass API: 10 req/day.
 		- WWO API: 500 req/day.
 
-	PERFORMANCE TARGETS (v8.0 - ChromaDB):
+	PERFORMANCE TARGETS (v8.1):
 		- Cache HIT (analysisCache): < 50ms
 		- Analisi Proattiva (background): ~20-30s
-		- **Query Vettoriale (ChromaDB):** < 100ms (include filtering e ricerca HNSW)
+		- **Query Vettoriale + Reranking:** < 2s
 
 	FILE DA NON MODIFICARE MAI:
 		- `pubspec.lock`, `package-lock.json`
@@ -477,11 +448,11 @@ DEPLOYMENT & DEVELOPMENT
 	FILE CRITICI PER L'AI (Modificabili):
 		- `sources.json`: "Telecomando" per l'aggiornamento della conoscenza.
 		- `tools/data-pipeline.js`: Script che genera `knowledge_base.json`.
-		- **`tools/migrate-to-chromadb.js` (NUOVO v8.0):** Script per popolare ChromaDB.
+		- `tools/migrate-to-chromadb.js`: Script con la logica di migrazione automatica.
 		- `mcp/tools/*.js`: Logica dei tool AI (chiama i servizi).
-		- **`lib/services/chromadb.service.js` (NUOVO v8.0):** Servizio di interazione con ChromaDB.
-		- `lib/services/vector.service.js` (RIFATTORIZZATO v8.0): Mediatore verso `chromadb.service`.
-		- `lib/services/reranker.service.js` (NUOVO v8.1): Servizio di re-ranking.
+		- `lib/services/chromadb.service.js`: Servizio di interazione con ChromaDB.
+		- `lib/services/reranker.service.js`: Servizio di re-ranking.
+
 
 ---
 ### 9. ANTI-PATTERN DA EVITARE (OBBLIGATORIO)
@@ -790,18 +761,18 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- models/ # Definisce le strutture dati (POJO/PODO).
 |   |   |-- forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca.
 |   |-- screens/ # Componenti di primo livello che rappresentano un'intera schermata. 
-|   |   |-- forecast_screen.dart # "Container" leggero. La sua responsabilità è inizializzare e "possedere" i controller/viewmodel e gestire gli Overlay (SearchOverlay, AnalystCard).
+|   |   |-- forecast_screen.dart # "Container" di primo livello. La sua responsabilità è unicamente inizializzare e "possedere" i ViewModel e gestire la presentazione degli Overlay (es. SearchOverlay), senza contenere logica di business.
 |   |-- services/ # Moduli dedicati alle interazioni con sistemi esterni.
-|   |   |-- api_service.dart # Il "Data Layer" di rete. Aderisce al Principio di Singola Responsabilità: il suo UNICO compito è eseguire chiamate HTTP al backend e restituire risposte grezze (JSON), senza logica di caching.
+|   |   |-- api_service.dart # Il "Data Layer" di rete. Aderisce al Principio di Singola Responsabilità: il suo UNICO compito è eseguire chiamate HTTP al backend e restituire risposte grezze (solitamente Map<String, dynamic>), senza logica di caching o di business.
 |   |   |-- cache_service.dart # [CHIAVE-ARCHITETTURA] Il "Cervello della Cache". Centralizza TUTTA la logica di persistenza locale (lettura, scrittura, TTL) tramite Hive.
 |   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili. 
 |   |   |-- weather_icon_mapper.dart # Traduttore di codici meteo in icone e colori.
 |   |-- viewmodels/ # Contiene i "cervelli" della nostra UI (Pattern: ViewModel). Incapsulano la logica di stato e di business, disaccoppiandola dalla UI.
-|   |   |-- forecast_viewmodel.dart # Il gestore dello stato per la schermata principale. Orchestra CacheService e ApiService.
+|   |   |-- forecast_viewmodel.dart # Il gestore dello stato e della logica di business per la schermata principale. Orchestra CacheServiceeApiService per recuperare i dati e li processa per la UI.
 |   |   |-- analysis_viewmodel.dart # Il "cervello" dell'analisi AI. Incapsula tutta la logica a 3 fasi (cache locale -> cache backend -> fallback) e gestisce lo stato (_currentState, _analysisText, _errorText, _cachedMetadata), notificando la AnalysisView dei cambiamenti.
 |   |-- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
-|   |   |-- analyst_card.dart # [RIFATTORIZZATO] Ora è un "contenitore" stateless estremamente semplice. La sua unica responsabilità è creare e fornire l'AnalysisViewModel alla AnalysisView tramite un ChangeNotifierProvider.
-|   |   |-- analysis_view.dart # La "vista" pura dell'analisi AI. È uno StatelessWidget che ascolta i cambiamenti dell'AnalysisViewModel e si ricostruisce per mostrare lo stato appropriato (loading, success, error), senza contenere alcuna logica di business.
+|   |   |-- analyst_card.dart # [RIFATTORIZZATO] Contenitore "intelligente" (StatefulWidget) che crea, gestisce e fornisce l'istanza di AnalysisViewModelal suo widget figlio,AnalysisVie
+|   |   |-- analysis_view.dart # La "vista" pura dell'analisi AI. È un widget reattivo (es. Consumer) che si limita ad ascoltare i cambiamenti dell'AnalysisViewModel e a ricostruire la UI per mostrare lo stato appropriato (loading, success, error), senza contenere alcuna logica di business.
 |   |   |-- analysis_skeleton_loader.dart # [CHIAVE-UX] Placeholder animato ("shimmer") per l'analisi di fallback.
 |   |   |-- fishing_score_indicator.dart # Dataviz specializzato per il pescaScore.
 |   |   |-- forecast_page.dart # Componente di presentazione per una singola giornata di previsione.
@@ -866,35 +837,32 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 ```
 |-- .github/ # Contiene i workflow di automazione CI/CD
 |   |-- workflows/ # File di configurazione per GitHub Actions
-|	| 	|-- fly-deploy.yml # Workflow per il deploy automatico su Fly.io al push sul branch 'main'
-|	| 	|-- update-kb.yml # Workflow CI che, alla modifica di `sources.json`, lancia la data-pipeline per aggiornare la KB
-|-- api/ # Handler degli endpoint REST, mantengono una logica leggera delegando ai servizi
-|   |-- analyze-day-fallback.js # Endpoint di fallback per generare analisi AI su richiesta esplicita (non P.H.A.N.T.O.M.)
-|   |-- autocomplete.js # Gestisce i suggerimenti di località durante la digitazione, interfacciandosi con un servizio geo
-|   |-- query-natural-language.js # Gestisce le query conversazionali in linguaggio naturale, orchestrate tramite MCP
-|   |-- recommend-species.js # Gestisce le richieste di raccomandazioni specifiche per una specie target, orchestrate tramite MCP
-|   |-- reverse-geocode.js # Esegue la geolocalizzazione inversa (da coordinate a nome località)
-|-- lib/ # Core dell'applicazione: logica di business, servizi, utilità
-|   |-- domain/ # Logica di business pura e calcoli specifici del dominio "pesca", senza dipendenze I/O
-|	| 	|-- forecast.assembler.js # Assembla i dati grezzi dalle API meteo in un formato JSON strutturato per il frontend
-|   |   |-- score.calculator.js # Calcola il "pescaScore" orario e giornaliero basato su regole meteorologiche complesse
-|   |   |-- weather.service.js # Aggrega in parallelo i dati da tutte le fonti API meteo esterne (OpenMeteo, WWO, Stormglass)
-|   |   |-- window.calculator.js # Identifica e calcola le "finestre di pesca ottimali" durante la giornata
-|   |-- services/ # Moduli che comunicano con sistemi esterni (API, DB) e incapsulano la logica I/O
-|   |   |-- chromadb.service.js # [CHIAVE v8.0] Servizio centrale per ogni interazione con ChromaDB (query, add, reset)
-|   |   |-- claude.service.js # Wrapper per l'API di Anthropic Claude (modello AI premium per analisi complesse)
-|   |   |-- gemini.service.js # Wrapper per l'API di Google Gemini (generazione testo e calcolo degli embeddings)
-|   |   |-- geo.service.js # Servizio per il geocoding (da nome località a coordinate) e reverse geocoding
-|   |   |-- hybrid-search.service.js # [LEGACY, da rimuovere] Logica di ricerca ibrida pre-ChromaDB
-|   |   |-- mcp-client.service.js # Client per comunicare con il server MCP in-process, gestisce la connessione e i retry
-|   |   |-- mistral.service.js # Wrapper per l'API di Mistral AI (modello AI alternativo open-source)
-|   |   |-- openmeteo.service.js # Servizio specializzato per l'API Open-Meteo (dati meteorologici orari)
-|   |   |-- proactive_analysis.service.js # Motore dell'analisi proattiva (architettura P.H.A.N.T.O.M.), si attiva dopo il forecast
-|   |   |-- reranker.service.js # [NUOVO v8.1] Servizio che chiama l'API Hugging Face per il re-ranking dei risultati di ChromaDB
-|   |   |-- stormglass.service.js # Servizio specializzato per l'API Stormglass (dati marini premium, es. correnti)
-|   |   |-- vector.service.js # [RIFATTORIZZATO v8.0] Semplice mediatore che inoltra le richieste RAG a `chromadb.service.js`
-|   |   |-- weather.service.js # [DUPLICATO, da rimuovere] La logica corretta è già in `lib/domain/weather.service.js`
-|   |   |-- wwo.service.js # Servizio specializzato per l'API WorldWeatherOnline (dati astronomici e maree)
+|	| 	|-- fly-deploy.yml # [OBSOLETO, DA RINOMINARE] Workflow per il deploy automatico su Render al push sul branch 'main'.
+|	| 	|-- update-kb.yml # Workflow CI che, alla modifica di `sources.json`, lancia la data-pipeline per aggiornare `knowledge_base.json`.
+|-- api/ # Handler degli endpoint REST, mantengono una logica leggera delegando ai servizi.
+|   |-- analyze-day-fallback.js # Endpoint di fallback per generare analisi AI su richiesta esplicita.
+|   |-- autocomplete.js # Gestisce i suggerimenti di località.
+|   |-- query-natural-language.js # Gestisce le query conversazionali, orchestrate tramite MCP.
+|   |-- recommend-species.js # Gestisce le richieste di raccomandazioni per specie, orchestrate tramite MCP.
+|   |-- reverse-geocode.js # Esegue la geolocalizzazione inversa.
+|-- lib/ # Core dell'applicazione: logica di business, servizi, utilità.
+|   |-- domain/ # Logica di business pura e calcoli specifici del dominio "pesca".
+|	| 	|-- forecast.assembler.js # Assembla i dati grezzi dalle API meteo in un formato JSON strutturato.
+|   |   |-- score.calculator.js # Calcola il "pescaScore" orario e giornaliero.
+|   |   |-- weather.service.js # Aggrega in parallelo i dati da tutte le fonti API meteo esterne.
+|   |   |-- window.calculator.js # Identifica le "finestre di pesca ottimali".
+|   |-- services/ # Moduli che comunicano con sistemi esterni (API, DB).
+|   |   |-- chromadb.service.js # [CHIAVE] Servizio centrale per ogni interazione con ChromaDB (query, add, reset).
+|   |   |-- claude.service.js # Wrapper per l'API di Anthropic Claude.
+|   |   |-- gemini.service.js # Wrapper per l'API di Google Gemini (generazione testo e embeddings).
+|   |   |-- geo.service.js # Servizio per geocoding e reverse geocoding.
+|   |   |-- mcp-client.service.js # [MOCK] Simula il client MCP, eseguendo i tool come funzioni locali.
+|   |   |-- mistral.service.js # Wrapper per l'API di Mistral AI.
+|   |   |-- openmeteo.service.js # Servizio specializzato per l'API Open-Meteo.
+|   |   |-- proactive_analysis.service.js # Motore dell'analisi proattiva (architettura P.H.A.N.T.O.M.).
+|   |   |-- reranker.service.js # [CHIAVE] Chiama l'API Hugging Face per il re-ranking dei risultati di ChromaDB.
+|   |   |-- stormglass.service.js # Servizio specializzato per l'API Stormglass.
+|   |   |-- wwo.service.js # Servizio specializzato per l'API WorldWeatherOnline.
 |   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili in tutto il backend
 |   |   |-- cache.manager.js # Gestisce le istanze di cache in-memory (`myCache` per dati meteo, `analysisCache` per AI)
 | 	|	|-- constants.js # Contiene costanti globali e di configurazione (es. coordinate di Posillipo, soglie)
@@ -904,18 +872,13 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |   |-- query-expander.js # [LEGACY, da rimuovere] Logica di espansione query pre-ChromaDB
 |   |   |-- wmo_code_converter.js # Converte i codici meteo WMO in descrizioni testuali comprensibili dall'utente
 | 	|-- forecast-logic.js # Orchestratore principale che coordina il flusso di recupero e assemblaggio dati meteo
-| 	|-- forecast.assembler.js # [DUPLICATO, da rimuovere] La logica corretta è già in `lib/domain/forecast.assembler.js`
-|-- mcp/ # Infrastruttura Model Context Protocol per la modularizzazione e l'orchestrazione dell'AI
-|   |-- resources/ # Risorse (dati, KB) esposte in modo standardizzato al server MCP
-|   |   |-- knowledge-base.js # Espone la Knowledge Base (ora concettualmente l'accesso a ChromaDB) a MCP
-|   |-- tools/ # Tool AI eseguibili, aggiornati per il flusso RAG con re-ranking
-|   |   |-- analyze-with-best-model.js # Tool che orchestra la generazione dell'analisi AI (ChromaDB query -> Re-rank -> LLM prompt)
-|   |   |-- extract-intent.js # Tool che estrae l'intento e le entità da una query in linguaggio naturale
-|   |   |-- generate-analysis.js # Tool RAG di base (legacy, non più in uso diretto)
-|   |   |-- natural-language-forecast.js # Tool che orchestra le risposte a query conversazionali (es. "che tempo fa a Napoli?")
-|   |   |-- recommend-for-species.js # Tool che genera raccomandazioni specifiche (ChromaDB query -> Re-rank -> LLM prompt)
-|   |   |-- vector-search.js # Tool di ricerca vettoriale di base (legacy, non più in uso)
-|   |-- server.js # Server MCP embedded che registra ed espone i tool ai client interni
+|-- mcp/ # Infrastruttura concettuale del Model Context Protocol.
+|   |-- resources/ # Risorse (es. accesso alla KB) esposte in modo standardizzato.
+|   |   |-- knowledge-base.js # Espone concettualmente l'accesso a ChromaDB.
+|   |-- tools/ # Tool AI eseguibili, aggiornati per il flusso RAG con re-ranking.
+|   |   |-- analyze-with-best-model.js # [CHIAVE] Orchestra la generazione dell'analisi (ChromaDB query -> Re-rank -> LLM prompt).
+|   |   |-- extract-intent.js # Tool che estrae l'intento e le entità da una query.
+|   |   |-- recommend-for-species.js # Tool che genera raccomandazioni specifiche per una specie.
 |-- node_modules/ # Dipendenze npm installate per il progetto
 |   |-- @mistralai/ # SDK per l'API di Mistral AI
 |   |-- @anthropic-ai/ # SDK per l'API di Anthropic (Claude)
@@ -927,37 +890,18 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- several files and folders # Altre dipendenze e sotto-dipendenze del progetto
 |-- pesca_app/ # Codice sorgente del frontend Flutter (non espanso qui)
 |   |-- build # Cartella di output della build del frontend
-|-- public/ # Asset statici serviti direttamente da Express
-|   |-- fish_icon.png # Icona pesce
-|   |-- half_moon.png # Icona luna
-|   |-- index.html # Pagina HTML di base per il server web
-|   |-- logo192.png # Logo 192x192 per PWA/manifest
-|   |-- logo512.png # Logo 512x512 per PWA/manifest
-|   |-- manifest.json # Manifest per Progressive Web App
-|-- tools/ # Script di supporto, pipeline e migrazione dati
-|   |-- data-pipeline.js # Script eseguito da GitHub Actions per leggere `sources.json` e generare `knowledge_base.json`
-|   |-- migrate-to-chromadb.js # Script per migrare i dati da `knowledge_base.json` al database ChromaDB (locale o remoto)
-|   |-- Project_lib_extract.ps1 # Utility PowerShell per analisi della struttura del progetto
-|   |-- Update-ProjectDocs.ps1 # Utility PowerShell per aggiornamento automatico della documentazione
-|-- -s # File o cartella con nome non valido, probabilmente un errore da eliminare
-|-- .dockerignore # Specifica i file e le cartelle da ignorare durante la creazione dell'immagine Docker
-|-- .env # File per le variabili d'ambiente locali (API keys, etc.) - NON COMMETTERE MAI SU GIT
-|-- debug.html # Pagina HTML semplice per il debug locale di endpoint
-|-- docker-compose.yml # [NUOVO] File per orchestrare il server ChromaDB in locale tramite Docker Desktop
-|-- Dockerfile # Definisce l'ambiente del container per Fly.io (include Node.js + dipendenze di sistema)
-|-- Dockerfile.simple # Dockerfile alternativo o precedente, non più in uso attivo
-|-- fly.toml # File di configurazione per il deployment su Fly.io (orchestra i processi Node e ChromaDB)
-|-- knowledge_base.json # "Source of truth" per la KB, generato da CI/CD e usato per la migrazione a ChromaDB
-|-- package-lock.json # Blocca le versioni esatte delle dipendenze npm per build riproducibili
-|-- package.json # Definisce le dipendenze npm e gli script del progetto (test, start, etc.)
-|-- README.md # Documentazione principale del progetto (da aggiornare alla v8.1)
-|-- server.js # Punto di ingresso dell'applicazione (avvia Express, inizializza servizi e connessioni)
-|-- server.test.js # Script per i test di integrazione automatici dell'API
-|-- sources.json # "Telecomando" dell'AI: le sue modifiche su Git innescano l'aggiornamento della KB
-|-- start.sh # Script di avvio che orchestra i processi Node.js e ChromaDB su Fly.io
-|-- test-kb.js # [NUOVO] Script di test specifico per la Knowledge Base (da creare/definire)
-|-- test-gemini.js # Script stand-alone per testare la connettività e le funzionalità dell'API di Gemini
-|-- test-reranker.js # [NUOVO v8.1] Script di test per validare il flusso di re-ranking in locale
+|-- public/ # Asset statici serviti direttamente da Express.
+|-- tools/ # Script di supporto, pipeline e migrazione dati.
+|   |-- data-pipeline.js # Script eseguito da GitHub Actions per generare `knowledge_base.json`.
+|   |-- migrate-to-chromadb.js # [CHIAVE] Contiene la logica per popolare ChromaDB, eseguita automaticamente all'avvio del server.
+|-- .dockerignore # Specifica i file da ignorare durante la creazione dell'immagine Docker.
+|-- .env # File per le variabili d'ambiente locali (API keys, etc.) - NON COMMETTERE MAI SU GIT.
+|-- Dockerfile # Definisce l'ambiente del container per Render (include Node.js e dipendenze Python per Chroma).
+|-- knowledge_base.json # "Source of truth" per la KB, generato da CI/CD e usato per la migrazione automatica.
+|-- package.json # Definisce le dipendenze npm e gli script del progetto.
+|-- server.js # Punto di ingresso dell'applicazione: avvia Express, inizializza i servizi e lancia la migrazione automatica.
+|-- sources.json # "Telecomando" dell'AI: le sue modifiche su Git innescano l'aggiornamento della KB.
+|-- start.sh # Script di avvio per Render che orchestra i processi Node.js e ChromaDB.
 ```
 
 
