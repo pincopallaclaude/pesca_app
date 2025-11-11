@@ -8,6 +8,8 @@ import 'fishing_score_indicator.dart';
 import 'glassmorphism_card.dart';
 import 'score_chart_dialog.dart';
 import 'score_details_dialog.dart';
+import 'feedback_dialog.dart'; // NUOVO: Importa il dialogo di feedback
+import '../services/api_service.dart'; // NUOVO: Importa il servizio API
 
 // Internal widget for the pulsing icon. This remains as our final refined version.
 class _PulsingIcon extends StatefulWidget {
@@ -189,6 +191,61 @@ class MainHeroModule extends StatelessWidget {
                 right: -5,
                 child: _PulsingIcon(onTap: onAnalysisTap),
               ),
+              // --- INIZIO BLOCCO CORRETTO ---
+              Positioned(
+                top: -2,
+                left: -5,
+                child: InkWell(
+                  onTap: () {
+                    // I dati meteo e di location non sono disponibili direttamente nel modello `ForecastData`
+                    // che hai condiviso, quindi li ricostruiamo. Per il futuro, sarebbe
+                    // meglio aggiungerli direttamente al modello.
+                    // Per ora, usiamo i dati disponibili.
+
+                    // NOTA: 'analysisText' non è presente in ForecastData.
+                    // Per ora, passeremo una stringa vuota come placeholder.
+                    // Questo dovrà essere risolto passando l'analisi al widget.
+                    final String analysisTextPlaceholder =
+                        "Analisi non disponibile in questo contesto.";
+
+                    showDialog(
+                      context: context,
+                      builder: (context) => FeedbackDialog(
+                        // Forniamo i parametri richiesti dal costruttore
+                        sessionId: data.sessionId,
+                        location: {
+                          // Ricostruiamo la mappa location
+                          'name': data.giornoNome,
+                          // Lat/Lon non sono nel modello, usiamo valori placeholder
+                          'lat': 0.0,
+                          'lon': 0.0,
+                        },
+                        weatherData: {
+                          // Ricostruiamo una mappa base dei dati meteo
+                          'tempMin': data.temperaturaMin,
+                          'tempMax': data.temperaturaMax,
+                          'weatherCode': data.dailyWeatherCode,
+                          'windSpeed': data.dailyWindSpeedKn,
+                          'pressure': data.dailyPressure,
+                        },
+
+                        pescaScore: data.pescaScoreNumeric,
+                        aiAnalysis: analysisTextPlaceholder,
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(50),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Icon(
+                      Icons.feedback_outlined,
+                      color: Colors.white.withOpacity(0.75),
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+              // --- FINE BLOCCO CORRETTO ---
             ],
           ),
         ),

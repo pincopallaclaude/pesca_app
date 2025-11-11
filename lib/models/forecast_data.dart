@@ -42,6 +42,7 @@ class ForecastData {
   final String sunriseTime;
   final String sunsetTime;
   final String moonPhase;
+  final String sessionId; // AGGIUNGI QUESTO CAMPO
 
   ForecastData({
     required this.giornoNome,
@@ -76,6 +77,7 @@ class ForecastData {
     required this.sunriseTime,
     required this.sunsetTime,
     required this.moonPhase,
+    required this.sessionId, // AGGIUNGI QUESTO
   });
 
   factory ForecastData.fromJson(
@@ -91,6 +93,8 @@ class ForecastData {
     final mareeParts = maree.split('|');
 
     return ForecastData(
+      sessionId: json['sessionId'] as String? ??
+          'fallback_${DateTime.now().millisecondsSinceEpoch}', // AGGIUNGI QUESTO
       giornoNome: json['giornoNome']?.toString() ?? 'N/D',
       giornoData: json['giornoData']?.toString() ?? 'N/D',
       meteoIcon: json['meteoIcon']?.toString() ?? '❓',

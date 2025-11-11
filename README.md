@@ -876,7 +876,7 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- resources/ # Risorse (es. accesso alla KB) esposte in modo standardizzato.
 |   |   |-- knowledge-base.js # Espone concettualmente l'accesso a ChromaDB.
 |   |-- tools/ # Tool AI eseguibili, aggiornati per il flusso RAG con re-ranking.
-|   |   |-- analyze-with-best-model.js # [CHIAVE] Orchestra la generazione dell'analisi (ChromaDB query -> Re-rank -> LLM prompt).
+|   |   |-- analyze-with-best-model.js # "[CHIAVE] Orchestra la generazione dell'analisi (ChromaDB query -> Re-rank -> LLM prompt) con logica di fallback automatico a Mistral in caso di fallimento di Gemini."
 |   |   |-- extract-intent.js # Tool che estrae l'intento e le entità da una query.
 |   |   |-- recommend-for-species.js # Tool che genera raccomandazioni specifiche per una specie.
 |-- node_modules/ # Dipendenze npm installate per il progetto

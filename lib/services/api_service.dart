@@ -184,4 +184,38 @@ class ApiService {
       client.close();
     }
   }
+
+  /// Invia il feedback dell'utente al backend.
+  ///
+  /// [feedbackData] deve essere una mappa contenente le informazioni
+  /// raccolte dal dialogo di feedback (es. sessionId, outcome, species, notes).
+  Future<bool> submitFeedback(Map<String, dynamic> feedbackData) async {
+    print("[ApiService] Invio feedback al backend...");
+    final client = _createCustomClient(
+        timeoutSeconds: 20); // Timeout standard per una chiamata POST
+    final uri = Uri.parse('$_baseUrl/submit-feedback');
+
+    try {
+      final response = await client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(feedbackData),
+      );
+
+      if (response.statusCode == 200) {
+        print("[ApiService] ✅ Feedback inviato con successo.");
+        return true;
+      } else {
+        print(
+            "[ApiService] ⚠️ Errore invio feedback: ${response.statusCode} - ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print(
+          "[ApiService] ❌ Errore di rete durante l'invio del feedback: ${e.toString()}");
+      return false;
+    } finally {
+      client.close();
+    }
+  }
 }
