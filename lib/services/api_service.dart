@@ -26,9 +26,11 @@ class ApiException implements Exception {
 class ApiService {
   // L'URL base del backend
   // --- USA L'URL DI RENDER ---
-  final String _baseUrl = 'https://pesca-api.onrender.com/api';
+  //final String _baseUrl = 'https://pesca-api.onrender.com/api';
 
   // --- NUOVA LOGICA: CLIENT HTTP PERSONALIZZATO ---
+
+  final String _baseUrl = 'http://192.168.1.12:10000/api';
 
   /// Crea un client HTTP con un timeout di connessione personalizzato.
   /// Utile per gestire i "cold start" dei servizi serverless come Render.
@@ -43,25 +45,37 @@ class ApiService {
 
   /// Recupera il JSON delle previsioni meteo.
   Future<String> fetchForecastJson(String location) async {
+    // --- DEBUG LOGS (Miglioria per Troubleshooting) ---
+    print("[ApiService DEBUG] BaseURL configurato: $_baseUrl");
+    final targetUri = Uri.parse('$_baseUrl/forecast?location=$location');
+    print("[ApiService DEBUG] Tentativo chiamata a: $targetUri");
+    // --------------------------------------------------
+
     print("[ApiService] Inizio chiamata di rete per: $location");
-    final client = _createCustomClient(); // Usa il client custom
+    final client = _createCustomClient();
+
     try {
-      final response = await client.get(
-        Uri.parse('$_baseUrl/forecast?location=$location'),
-      );
+      final response = await client.get(targetUri);
 
       if (response.statusCode == 200) {
         print('[ApiService] Raw JSON ricevuto dal backend.');
         return response.body;
       }
+      print("[ApiService DEBUG] Status Code Errato: ${response.statusCode}");
+      print("[ApiService DEBUG] Body Errore: ${response.body}");
       throw ApiException('Errore del server: ${response.statusCode}');
     } on TimeoutException {
+      print("[ApiService DEBUG] Timeout scaduto");
       throw const ApiException('Timeout di rete (60s) superato.');
     } catch (e) {
+      // --- DEBUG ERROR (Fondamentale per capire il crash) ---
+      print("[ApiService DEBUG] ECCEZIONE REALE: $e");
+      // ----------------------------------------------------
+
       if (e is ApiException) rethrow;
       throw const ApiException('Errore di rete o server non disponibile.');
     } finally {
-      client.close(); // Chiudi sempre il client
+      client.close();
     }
   }
 

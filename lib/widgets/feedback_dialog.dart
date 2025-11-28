@@ -28,6 +28,7 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
   int _rating = 3;
   String _action = 'went_fishing';
   String _outcome = 'moderate';
+  String? _feedbackReason; // Motivo specifico per feedback negativo
   bool _isSubmitting = false;
 
   Future<void> _submitFeedback() async {
@@ -35,15 +36,33 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
     try {
       final apiService = ApiService();
+
+      // Estraiamo lat/lon dall'oggetto location (che è Map<String, double>?)
+      final lat = widget.location['lat'] as double?;
+      final lon = widget.location['lon'] as double?;
+
       await apiService.submitFeedback({
-        'sessionId': widget.sessionId,
-        'location': widget.location,
-        'weatherData': widget.weatherData,
-        'pescaScore': widget.pescaScore,
+        'sessionId':
+            widget.sessionId, // Assicurati che questo sia un UUID valido!
+
+        // APPATTIMENTO LOCATION (come vuole Zod)
+        'location_lat': lat ?? 0.0,
+        'location_lon': lon ?? 0.0,
+        'location_name': 'Unknown', // O estrai se disponibile
+
+        // RINOMINA DATI METEO
+        'weather_json':
+            widget.weatherData, // Rename weatherData -> weather_json
+
+        'pescaScorePredicted': widget.pescaScore,
         'aiAnalysis': widget.aiAnalysis,
-        'userFeedback': _rating,
+
+        'user_feedback': _rating,
         'userAction': _action,
         'outcome': _outcome,
+
+        // GESTIONE REASON (evita null)
+        if (_feedbackReason != null) 'feedback_reason': _feedbackReason,
       });
 
       if (mounted) {
@@ -102,6 +121,40 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 );
               }),
             ),
+
+            if (_rating < 3) ...[
+              const SizedBox(height: 20),
+              const Text(
+                'Cosa non ha funzionato? 🤔',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _feedbackReason,
+                    hint: const Text('Seleziona un motivo...'),
+                    items: [
+                      'Condizioni meteo diverse dal previsto',
+                      'Mare/Vento diversi dal previsto',
+                      'Attività pesci assente',
+                      'Zona non produttiva oggi',
+                      'Orario sbagliato',
+                      'Altro'
+                    ]
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (val) => setState(() => _feedbackReason = val),
+                  ),
+                ),
+              ),
+            ],
 
             const SizedBox(height: 20),
 

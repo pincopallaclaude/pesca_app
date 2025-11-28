@@ -30,6 +30,15 @@ class AnalysisViewModel extends ChangeNotifier {
     _initializeAnalysis();
   }
 
+  void fetchAnalysisWithDelay() {
+    // Attendi un breve periodo per dare tempo alla cache del backend di popolarsi.
+    // 2 secondi è un compromesso: abbastanza per un 'hot start' del server,
+    // non abbastanza per un 'cold start' completo, ma evita il fallback immediato.
+    Future.delayed(const Duration(seconds: 2), () {
+      _initializeAnalysis();
+    });
+  }
+
   /// Orchestra il caricamento dell'analisi in 3 fasi.
   Future<void> _initializeAnalysis() async {
     // 1. Reset dello stato
