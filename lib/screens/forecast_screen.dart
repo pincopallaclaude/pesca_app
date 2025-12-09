@@ -1,8 +1,11 @@
 // /lib/screens/forecast_screen.dart
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:light/light.dart';
 
 import '../viewmodels/forecast_viewmodel.dart';
@@ -11,8 +14,10 @@ import '../services/api_service.dart';
 import '../services/cache_service.dart';
 import '../widgets/analyst_card.dart';
 import '../widgets/search_overlay.dart';
-import '../widgets/forecast_view.dart'; // NUOVO IMPORT
+import '../widgets/forecast_view.dart';
 import '../widgets/location_services_dialog.dart';
+import 'mission_control/mission_control_screen.dart';
+import '../widgets/premium_drawer/premium_drawer.dart';
 
 class ForecastScreen extends StatefulWidget {
   const ForecastScreen({super.key});
@@ -20,11 +25,13 @@ class ForecastScreen extends StatefulWidget {
   State<ForecastScreen> createState() => _ForecastScreenState();
 }
 
-class _ForecastScreenState extends State<ForecastScreen> {
+class _ForecastScreenState extends State<ForecastScreen>
+    with TickerProviderStateMixin {
   late final ForecastController _controller;
   final PageController _pageController = PageController();
+  late AnimationController _drawerAnimationController;
+  late AnimationController _particleController;
 
-  // Lo stato della UI rimane qui, perché è gestito dalla Screen.
   int _currentPageIndex = 0;
   bool _isHourlyForecastExpanded = false;
   bool _isAnalysisVisible = false;
@@ -43,6 +50,16 @@ class _ForecastScreenState extends State<ForecastScreen> {
       cacheService: CacheService(),
     )..initializeForecast('40.813,14.208', "Posillipo");
 
+    _drawerAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
+
     _initLightSensor();
   }
 
@@ -52,6 +69,8 @@ class _ForecastScreenState extends State<ForecastScreen> {
     _pageController.dispose();
     _searchOverlayEntry?.remove();
     _controller.dispose();
+    _drawerAnimationController.dispose();
+    _particleController.dispose();
     super.dispose();
   }
 
@@ -68,7 +87,6 @@ class _ForecastScreenState extends State<ForecastScreen> {
     }
   }
 
-  // --- GESTIONE OVERLAYS ---
   void _toggleSearchPanel() {
     if (_searchOverlayEntry == null) {
       _searchOverlayEntry = OverlayEntry(
@@ -93,6 +111,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
   }
 
   void _toggleAnalysis() {
+    HapticFeedback.mediumImpact();
     setState(() => _isAnalysisVisible = !_isAnalysisVisible);
   }
 
@@ -118,10 +137,10 @@ class _ForecastScreenState extends State<ForecastScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: PremiumDrawer(particleController: _particleController),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Il listener principale per lo stato dei dati
           AnimatedBuilder(
             animation: _controller,
             builder: (context, _) {
@@ -146,16 +165,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
               );
             },
           ),
-
-          // Gli overlay vengono gestiti qui, al livello più alto
           _buildOverlays(),
-
-          // Indicatore di caricamento per il GPS
           if (_isLoadingGps)
             Container(
               color: Colors.black.withOpacity(0.5),
               child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white)),
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
             ),
         ],
       ),
@@ -172,8 +188,8 @@ class _ForecastScreenState extends State<ForecastScreen> {
           child: _isAnalysisVisible
               ? BackdropFilter(
                   key: const ValueKey('blur'),
-                  filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                  child: Container(color: Colors.black.withOpacity(0.2)),
+                  filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                  child: Container(color: Colors.black.withOpacity(0.3)),
                 )
               : const SizedBox.shrink(key: ValueKey('no-blur')),
         ),
@@ -183,19 +199,27 @@ class _ForecastScreenState extends State<ForecastScreen> {
             child: Container(color: Colors.transparent),
           ),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
+          duration: const Duration(milliseconds: 600),
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: CurvedAnimation(
+                  parent: animation, curve: Curves.easeOutCubic),
               child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.9, end: 1.0).animate(animation),
-                  child: child)),
+                scale: Tween<double>(begin: 0.85, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                ),
+                child: child,
+              ),
+            );
+          },
           child: _isAnalysisVisible && forecasts != null
               ? Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 24.0, vertical: 60.0),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.75),
+                      maxHeight: MediaQuery.of(context).size.height * 0.75,
+                    ),
                     child: AnalystCard(
                       key: ValueKey("analysis_card_$_currentPageIndex"),
                       lat: 40.813,

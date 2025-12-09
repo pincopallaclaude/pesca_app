@@ -78,7 +78,10 @@ class _ForecastPageState extends State<ForecastPage> {
           elevation: 0,
           pinned: true,
           centerTitle: true,
-          leading: IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
           title: Text(widget.locationName,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
