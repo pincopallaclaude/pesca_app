@@ -1,0 +1,565 @@
+﻿// /lib/widgets/live_diagram/ai/diagram_ai_agent.dart
+
+import 'dart:math';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../schema/diagram_schema.dart';
+import 'models/node_metadata.dart'; // Importato per il GlobalNodeRegistry
+import 'scenario_request_v2.dart';
+import 'semantic_engine.dart';
+import 'quality_metrics.dart';
+
+/// Agente AI Semantico per la gestione autonoma dei Live Flow Diagrams.
+/// Versione Enhanced con motore fisico Collision-Aware basato sui raggi dei metadati.
+class DiagramAIAgent {
+  final Random _random = Random();
+
+  static const Map<String, TopologyTemplate> _templates = {
+    'diamond': TopologyTemplate(
+      name: 'Diamond Layout',
+      centerNode: true,
+      satelliteRadius: 0.25,
+      verticalSpread: 0.40,
+    ),
+    'tree': TopologyTemplate(
+      name: 'Tree Layout',
+      centerNode: false,
+      satelliteRadius: 0.30,
+      verticalSpread: 0.35,
+    ),
+    'circular': TopologyTemplate(
+      name: 'Circular Layout',
+      centerNode: true,
+      satelliteRadius: 0.35,
+      verticalSpread: 0.35,
+    ),
+    'layered': TopologyTemplate(
+      name: 'Layered Layout',
+      centerNode: false,
+      satelliteRadius: 0.0,
+      verticalSpread: 0.20,
+    ),
+    'force-directed': TopologyTemplate(
+      name: 'Force-Directed Layout',
+      centerNode: false,
+      satelliteRadius: 0.0,
+      verticalSpread: 0.0,
+    ),
+  };
+
+  /// TOOL 1: Genera nuovo scenario da ScenarioRequestV2 (semantic-aware)
+  DiagramScene createScenarioFromDescription(ScenarioRequestV2 request) {
+    print('[AI Agent] Generazione scenario SEMANTICO: ${request.scenarioId}');
+
+    // 0. Espansione Contesto
+    ScenarioRequestV2 processedRequest = request;
+    if (request.autoExpandContext && request.focusNode != null) {
+      final expandedFlow = SemanticEngine.expandContextForNode(
+        request.focusNode!,
+        request.dataFlow,
+      );
+      processedRequest = request.copyWith(dataFlow: expandedFlow);
+    }
+
+    // 1. Analisi e Template
+    final nodes = _analyzeNodesFromDescription(processedRequest);
+    final template = SemanticEngine.inferTemplate(processedRequest);
+
+    // 2. Layout (Semantic Engine ora gestisce collisioni e raggi ampi)
+    var positions = SemanticEngine.resolveImplicitNodes(
+      nodes,
+      processedRequest,
+    );
+
+    // 3. Ottimizzazione Layout (Skip reset se già calcolato)
+    if (positions.length < nodes.length) {
+      positions = optimizeTopologyV2(
+        nodes: nodes,
+        template: template,
+        focusNode: processedRequest.focusNode,
+        existingPositions: positions,
+      );
+    }
+
+    // --- FIX PUNTO 3: PRE-CALCOLO CONTROL POINTS DETERMINISTICI ---
+    // Mappa chiave "from-to" -> Offset CP. Garantisce che Ghost e Neon coincidano.
+    final Map<String, Offset> unifiedCPs = {};
+
+    processedRequest.dataFlow.forEach((from, targets) {
+      for (var to in targets) {
+        if (positions.containsKey(from) && positions.containsKey(to)) {
+          // Calcolo curva deterministica
+          final p1 = positions[from]!;
+          final p2 = positions[to]!;
+          final dx = p2.dx - p1.dx;
+          final dy = p2.dy - p1.dy;
+
+          // Logica curvatura: se verticale usa laterale, se orizzontale usa arco
+          Offset cpOffset;
+          if (dx.abs() < 0.1) {
+            // Verticale
+            cpOffset = Offset(
+              dy.sign * 0.4 * 100,
+              0,
+            ); // Curva laterale accentuata
+          } else {
+            // Perpendicolare
+            cpOffset = Offset(-dy * 0.5 * 200, dx * 0.5 * 200);
+            // Clamp per non esagerare
+            if (cpOffset.distance > 80)
+              cpOffset = (cpOffset / cpOffset.distance) * 80;
+          }
+          unifiedCPs['$from-$to'] = cpOffset;
+        }
+      }
+    });
+
+    // 4. Generazione Ghost Paths (Passiamo i CP calcolati)
+    final ghostPaths = _generateGhostPathsSynced(
+      processedRequest.dataFlow,
+      positions,
+      unifiedCPs,
+    );
+
+    // 5. Generazione Fasi (Passiamo i CP calcolati)
+    final autoLabels = SemanticEngine.generateMissingLabels(
+      processedRequest.dataFlow,
+      processedRequest.phaseLabels,
+    );
+
+    final enrichedRequest = processedRequest.copyWith(phaseLabels: autoLabels);
+
+    final phases = _generateStoryPhasesSynced(enrichedRequest, unifiedCPs);
+
+    return DiagramScene(
+      id: processedRequest.scenarioId,
+      nodePositions: positions,
+      ghostPaths: ghostPaths,
+      phases: phases,
+    );
+  }
+
+  // --- AGGIUNGI QUESTI NUOVI METODI PRIVATI SINCRONIZZATI ---
+
+  List<GhostPath> _generateGhostPathsSynced(
+    Map<String, List<String>> flow,
+    Map<String, Offset> positions,
+    Map<String, Offset> cps,
+  ) {
+    final paths = <GhostPath>[];
+    flow.forEach((from, targets) {
+      for (final to in targets) {
+        if (positions.containsKey(from) && positions.containsKey(to)) {
+          final key = '$from-$to';
+          final cp = cps[key]; // Usa il CP pre-calcolato
+          paths.add(GhostPath(from, to, curved: true, cp: cp));
+        }
+      }
+    });
+    return paths;
+  }
+
+  List<StoryPhase> _generateStoryPhasesSynced(
+    ScenarioRequestV2 request,
+    Map<String, Offset> cps,
+  ) {
+    final phases = <StoryPhase>[];
+    final duration =
+        1.0 / (request.dataFlow.length > 0 ? request.dataFlow.length : 1);
+    int idx = 0;
+
+    request.dataFlow.forEach((from, targets) {
+      final elements = <VisualElement>[];
+      for (final to in targets) {
+        final key = '$from-$to';
+        final cp = cps[key]; // Usa LO STESSO CP del GhostPath
+
+        elements.add(
+          NeonFlow(
+            fromNode: from,
+            toNode: to,
+            color: _getColorForPhase(idx),
+            isCurved: true,
+            controlPointOffset: cp, // Sincronizzato
+          ),
+        );
+
+        elements.add(
+          FloatingLabel(
+            text: request.phaseLabels?[idx] ?? 'DATA',
+            anchorNodeA: from,
+            anchorNodeB: to,
+            color: _getColorForPhase(idx),
+            offset: Offset.zero, // Centrato
+          ),
+        );
+      }
+
+      phases.add(
+        StoryPhase(
+          id: 'phase_$idx',
+          startT: idx * duration,
+          endT: (idx + 1) * duration,
+          elements: elements,
+        ),
+      );
+      idx++;
+    });
+    return phases;
+  }
+
+  /// TOOL 2: Ottimizzazione topologica V2 (Collision-Aware)
+  Map<String, Offset> optimizeTopologyV2({
+    required List<String> nodes,
+    required String template,
+    String? focusNode,
+    QualityPreset qualityPreset = QualityPreset.balanced,
+    Map<String, Offset>? existingPositions,
+  }) {
+    final tpl = _templates[template] ?? _templates['diamond']!;
+    Map<String, Offset> positions = existingPositions != null
+        ? Map<String, Offset>.from(existingPositions)
+        : {};
+
+    // Distribuzione iniziale se mancano posizioni
+    if (positions.isEmpty) {
+      if (template == 'layered') {
+        positions = _layeredLayout(nodes, focusNode);
+      } else if (template == 'force-directed') {
+        positions = _forceDirectedLayout(nodes, qualityPreset.maxIterations);
+      } else if (focusNode != null && tpl.centerNode) {
+        positions[focusNode] = const Offset(0.50, 0.40);
+        final satellites = nodes.where((n) => n != focusNode).toList();
+        positions.addAll(
+          _arrangeSatellites(
+            satellites,
+            center: positions[focusNode]!,
+            radius: tpl.satelliteRadius,
+            verticalOffset: tpl.verticalSpread,
+          ),
+        );
+      } else {
+        positions = _distributeNodes(nodes, tpl);
+      }
+    }
+
+    // Applicazione Motore Fisico Collision-Aware
+    positions = _applyForceDirectedLayout(
+      positions,
+      qualityPreset.maxIterations,
+    );
+
+    if (qualityPreset.enableFullGeometry) {
+      positions = _optimizeForPerception(positions, nodes);
+    }
+
+    return positions;
+  }
+
+  // --- Motore Fisico & Perception Helpers ---
+
+  /// Algoritmo di Layout basato su forze con gestione reale delle collisioni
+  Map<String, Offset> _applyForceDirectedLayout(
+    Map<String, Offset> positions,
+    int iterations,
+  ) {
+    var current = Map<String, Offset>.from(positions);
+    const double viewPortMargin = 0.1;
+
+    // Lista dei nodi che NON devono muoversi (Pinned)
+    final pinnedNodes = <String>{};
+    current.keys.forEach((nodeId) {
+      final meta = GlobalNodeRegistry.get(nodeId);
+      // Se ha una posizione di default definita nel registry, è PINNED.
+      if (meta?.defaultPosition != null) {
+        pinnedNodes.add(nodeId);
+      }
+    });
+
+    for (int iter = 0; iter < iterations; iter++) {
+      final forces = <String, Offset>{};
+
+      current.forEach((nodeA, posA) {
+        // FIX: Se il nodo è pinned, forza zero e salta calcoli
+        if (pinnedNodes.contains(nodeA)) {
+          forces[nodeA] = Offset.zero;
+          return;
+        }
+
+        var force = Offset.zero;
+        final radiusA = GlobalNodeRegistry.get(nodeA)?.collisionRadius ?? 0.1;
+
+        current.forEach((nodeB, posB) {
+          if (nodeA != nodeB) {
+            final diff = posA - posB;
+            final dist = diff.distance;
+            final radiusB =
+                GlobalNodeRegistry.get(nodeB)?.collisionRadius ?? 0.1;
+
+            final minSafeDist = radiusA + radiusB + 0.05;
+
+            if (dist < minSafeDist) {
+              final strength = (minSafeDist - dist) / minSafeDist;
+              force += (diff / (dist + 0.001)) * strength * 0.05;
+            }
+          }
+        });
+        forces[nodeA] = force;
+      });
+
+      // Applica forze SOLO ai nodi non pinned
+      current.forEach((node, pos) {
+        if (!pinnedNodes.contains(node)) {
+          final newPos = pos + forces[node]!;
+          current[node] = Offset(
+            newPos.dx.clamp(viewPortMargin, 1.0 - viewPortMargin),
+            newPos.dy.clamp(viewPortMargin, 1.0 - viewPortMargin),
+          );
+        }
+      });
+    }
+    return current;
+  }
+
+  Map<String, Offset> _optimizeForPerception(
+    Map<String, Offset> positions,
+    List<String> nodes,
+  ) {
+    var best = Map<String, Offset>.from(positions);
+    var bestScore = double.negativeInfinity;
+
+    for (int iter = 0; iter < 20; iter++) {
+      final candidate = _perturbPositions(best, 0.03);
+      final score = _perceptionScore(candidate);
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  double _perceptionScore(Map<String, Offset> positions) {
+    final edges = <EdgeData>[];
+    positions.forEach((from, posFrom) {
+      positions.forEach((to, posTo) {
+        if (from != to && _random.nextDouble() < 0.3) {
+          edges.add(EdgeData(from, to));
+        }
+      });
+    });
+    return QualityMetricsCalculator.calculate(
+      positions: positions,
+      edges: edges,
+    ).compositeScore;
+  }
+
+  Map<String, Offset> _perturbPositions(
+    Map<String, Offset> positions,
+    double magnitude,
+  ) {
+    final perturbed = <String, Offset>{};
+    positions.forEach((node, pos) {
+      final dx = (_random.nextDouble() - 0.5) * magnitude;
+      final dy = (_random.nextDouble() - 0.5) * magnitude;
+      perturbed[node] = Offset(
+        (pos.dx + dx).clamp(0.05, 0.95),
+        (pos.dy + dy).clamp(0.05, 0.95),
+      );
+    });
+    return perturbed;
+  }
+
+  // --- Analisi & Geometria ---
+
+  List<String> _analyzeNodesFromDescription(ScenarioRequestV2 request) {
+    final nodes = <String>{};
+    nodes.addAll(request.dataFlow.keys);
+    for (final targets in request.dataFlow.values) {
+      nodes.addAll(targets);
+    }
+    return nodes.toList();
+  }
+
+  List<GhostPath> _generateGhostPathsOptimized(
+    Map<String, List<String>> dataFlow,
+    Map<String, Offset> positions,
+    QualityPreset quality,
+  ) {
+    final paths = <GhostPath>[];
+    dataFlow.forEach((from, targets) {
+      for (final to in targets) {
+        if (positions.containsKey(from) && positions.containsKey(to)) {
+          final p1 = positions[from]!;
+          final p2 = positions[to]!;
+          final distance = (p1 - p2).distance;
+          final curved = distance > 0.3;
+          Offset? cp;
+
+          if (curved) {
+            final dx = p2.dx - p1.dx;
+            final dy = p2.dy - p1.dy;
+            Offset perp = (dx.abs() < 0.1)
+                ? const Offset(1.0, 0.0)
+                : Offset(-dy, dx);
+            final normalized = perp / perp.distance;
+            cp = normalized * (distance * 0.5);
+          }
+          paths.add(GhostPath(from, to, curved: curved, cp: cp));
+        }
+      }
+    });
+    return paths;
+  }
+
+  Map<String, Offset> _arrangeSatellites(
+    List<String> satellites, {
+    required Offset center,
+    required double radius,
+    required double verticalOffset,
+  }) {
+    final positions = <String, Offset>{};
+    final int count = satellites.length;
+    final double angleStep = (2 * pi) / (count > 0 ? count : 1);
+    double currentAngle = -pi / 2;
+
+    for (int i = 0; i < satellites.length; i++) {
+      final x = center.dx + cos(currentAngle) * (radius * 1.5);
+      final y = center.dy + sin(currentAngle) * radius;
+      positions[satellites[i]] = Offset(
+        x.clamp(0.10, 0.90),
+        y.clamp(0.10, 0.90),
+      );
+      currentAngle += angleStep;
+    }
+    return positions;
+  }
+
+  List<StoryPhase> _generateStoryPhases(ScenarioRequestV2 request) {
+    final phases = <StoryPhase>[];
+    final flowList = request.dataFlow.entries.toList();
+    if (flowList.isEmpty) return phases;
+
+    final phaseDuration = 1.0 / flowList.length;
+
+    for (int i = 0; i < flowList.length; i++) {
+      final from = flowList[i].key;
+      final targets = flowList[i].value;
+      final elements = <VisualElement>[];
+
+      for (final to in targets) {
+        elements.add(
+          NeonFlow(
+            fromNode: from,
+            toNode: to,
+            color: _getColorForPhase(i),
+            isCurved: true,
+            // Usa lo stesso offset logico calcolato per i GhostPath per evitare divergenza
+            controlPointOffset: const Offset(0, -30),
+          ),
+        );
+      }
+
+      phases.add(
+        StoryPhase(
+          id: 'phase_$i',
+          startT: i * phaseDuration,
+          endT: (i + 1) * phaseDuration,
+          elements: elements,
+        ),
+      );
+    }
+    return phases;
+  }
+
+  // --- Layout Engine (Seed generators) ---
+
+  Map<String, Offset> _layeredLayout(List<String> nodes, String? focusNode) {
+    final positions = <String, Offset>{};
+    final yStep = 0.8 / (nodes.length > 1 ? nodes.length : 1);
+    for (int i = 0; i < nodes.length; i++) {
+      positions[nodes[i]] = Offset(0.5, 0.1 + i * yStep);
+    }
+    return positions;
+  }
+
+  Map<String, Offset> _forceDirectedLayout(List<String> nodes, int iterations) {
+    final positions = <String, Offset>{};
+    for (final node in nodes) {
+      positions[node] = Offset(
+        0.2 + _random.nextDouble() * 0.6,
+        0.2 + _random.nextDouble() * 0.6,
+      );
+    }
+    return _applyForceDirectedLayout(positions, iterations);
+  }
+
+  Map<String, Offset> _distributeNodes(
+    List<String> nodes,
+    TopologyTemplate tpl,
+  ) {
+    final positions = <String, Offset>{};
+    final cols = sqrt(nodes.length).ceil();
+    for (int i = 0; i < nodes.length; i++) {
+      positions[nodes[i]] = Offset(
+        0.2 + (i % cols) * 0.3,
+        0.2 + (i ~/ cols) * 0.3,
+      );
+    }
+    return positions;
+  }
+
+  Color _getColorForPhase(int index) {
+    const colors = [
+      Colors.cyanAccent,
+      Colors.purpleAccent,
+      Colors.orangeAccent,
+      Colors.greenAccent,
+    ];
+    return colors[index % colors.length];
+  }
+
+  QualityMetrics _calculateSceneQuality(DiagramScene scene) {
+    final edges = scene.ghostPaths.map((g) => EdgeData(g.from, g.to)).toList();
+    return QualityMetricsCalculator.calculate(
+      positions: scene.nodePositions,
+      edges: edges,
+    );
+  }
+
+  ValidationResult validateScenario(DiagramScene scene) {
+    final errors = <String>[];
+    if (scene.nodePositions.isEmpty) errors.add("Nessun nodo definito");
+    return ValidationResult(
+      isValid: errors.isEmpty,
+      errors: errors,
+      warnings: [],
+    );
+  }
+
+  DiagramScene optimizeExistingScenario(
+    DiagramScene original, {
+    bool optimizeLayout = true,
+    bool simplifyPaths = true,
+    bool balanceTiming = true,
+  }) {
+    if (optimizeLayout) {
+      final newPos = optimizeTopologyV2(
+        nodes: original.nodePositions.keys.toList(),
+        template: 'force-directed',
+        existingPositions: original.nodePositions,
+        qualityPreset: QualityPreset.balanced,
+      );
+      return DiagramScene(
+        id: original.id,
+        nodePositions: newPos,
+        ghostPaths: original.ghostPaths,
+        phases: original.phases,
+      );
+    }
+    return original;
+  }
+
+  String exportScenarioAsCode(DiagramScene scene) =>
+      "// Export feature disabilitata";
+}

@@ -1,31 +1,12 @@
 // lib/widgets/analysis_view.dart
 
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:provider/provider.dart';
 import '../viewmodels/analysis_viewmodel.dart';
 import 'analysis_skeleton_loader.dart';
-
-// Sposta stili e builder qui, perché sono legati alla View
-final TextStyle baseStyle =
-    GoogleFonts.lora(color: const Color(0xFFEAEAEA), fontSize: 16, height: 1.6);
-final TextStyle strongStyle = GoogleFonts.lato(
-    fontWeight: FontWeight.w900, color: const Color(0xFFFFC107));
-final TextStyle h3Style = GoogleFonts.lato(
-    color: Colors.white,
-    fontSize: 20,
-    fontWeight: FontWeight.bold,
-    height: 1.4);
-
-class HorizontalRuleBuilder extends MarkdownElementBuilder {
-  @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    return const Divider(color: Colors.white38, height: 32, thickness: 1);
-  }
-}
 
 class AnalysisView extends StatelessWidget {
   final VoidCallback onClose;
@@ -34,169 +15,169 @@ class AnalysisView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Usa Consumer per ascoltare i cambiamenti del ViewModel
+    final maxH = MediaQuery.of(context).size.height * 0.60;
+
     return Consumer<AnalysisViewModel>(
       builder: (context, viewModel, child) {
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
+          duration: const Duration(milliseconds: 300),
           child: switch (viewModel.currentState) {
-            AnalysisState.loading =>
-              const AnalysisSkeletonLoader(key: ValueKey('loading')),
-            AnalysisState.success => _buildSuccessCard(context, viewModel,
-                key: const ValueKey('success')),
-            AnalysisState.error =>
-              _buildErrorCard(context, viewModel, key: const ValueKey('error')),
+            AnalysisState.loading => const AnalysisSkeletonLoader(),
+            AnalysisState.success =>
+              _buildPremiumGlass(context, viewModel, maxH),
+            AnalysisState.error => _buildErrorState(context, viewModel),
           },
         );
       },
     );
   }
 
-  Widget _buildSuccessCard(BuildContext context, AnalysisViewModel viewModel,
-      {Key? key}) {
-    final headerIconColor = const Color(0xFFFFD700);
-
-    return AnimationLimiter(
-      key: key,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: AnimationConfiguration.toStaggeredList(
-          duration: const Duration(milliseconds: 450),
-          childAnimationBuilder: (widget) => SlideAnimation(
-              verticalOffset: 50.0, child: FadeInAnimation(child: widget)),
-          children: [
-            // Header
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.auto_awesome,
-                            color: headerIconColor, size: 18),
-                        const SizedBox(width: 6),
-                        Text('INSIGHT DI PESCA',
-                            style: GoogleFonts.robotoCondensed(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
-                                color: Colors.white)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    _buildModelBadge(viewModel),
-                  ],
+  Widget _buildPremiumGlass(
+      BuildContext context, AnalysisViewModel viewModel, double maxH) {
+    return Container(
+      width:
+          double.infinity, // Risolve la issue delle frecce rosse (espansione)
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A)
+            .withOpacity(0.95), // Blu scuro profondo (stile "PRIMA")
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTransparentHeader(viewModel),
+              Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.cyanAccent.withOpacity(0.15),
+                      Colors.transparent
+                    ],
+                  ),
                 ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                      onTap: onClose,
-                      borderRadius: BorderRadius.circular(50),
-                      child: const Padding(
-                          padding: EdgeInsets.all(4.0),
-                          child: Icon(Icons.close,
-                              color: Colors.white70, size: 20))),
+              ),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxH - 80),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    physics: const BouncingScrollPhysics(),
+                    child: _buildMarkdownContent(context, viewModel),
+                  ),
                 ),
-              ],
-            ),
-            // Divider
-            const Padding(
-                padding: EdgeInsets.symmetric(vertical: 10.0),
-                child: Divider(color: Colors.white24, height: 1, thickness: 1)),
-            // Contenuto Markdown
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 400.0),
-              child: SingleChildScrollView(
-                  child: _buildMarkdownContent(context, viewModel)),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildErrorCard(BuildContext context, AnalysisViewModel viewModel,
-      {Key? key}) {
-    return Column(
-      key: key,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(children: [
-              const Icon(Icons.error_outline,
-                  color: Colors.orangeAccent, size: 20),
-              const SizedBox(width: 8),
-              Text('Errore',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.bold))
-            ]),
-            IconButton(
-                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                onPressed: onClose,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints())
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(viewModel.errorText,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-            textAlign: TextAlign.center),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-            icon: const Icon(Icons.refresh, size: 16),
-            onPressed: viewModel.retry,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white10),
-            label: const Text('Riprova', style: TextStyle(color: Colors.white)))
-      ],
+  Widget _buildTransparentHeader(AnalysisViewModel viewModel) {
+    return Container(
+      color: Colors.white.withOpacity(0.02),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome, color: Color(0xFFFFD700), size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'INSIGHT DI PESCA',
+                  style: GoogleFonts.robotoCondensed(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: Colors.white.withOpacity(0.95),
+                  ),
+                ),
+                _buildNanoBadge(viewModel),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onClose,
+            icon: const Icon(Icons.close, color: Colors.white60, size: 22),
+            style: IconButton.styleFrom(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildModelBadge(AnalysisViewModel viewModel) {
-    String modelDisplay = 'RAG Powered';
-    final metadata = viewModel.cachedMetadata;
-    if (metadata != null && metadata['modelUsed'] != null) {
-      final model = metadata['modelUsed'] as String;
-      String formattedModelName;
-      if (model.contains('gemini-2.5-flash'))
-        formattedModelName = 'Gemini 1.5 Flash';
-      else if (model.contains('claude'))
-        formattedModelName = 'Claude 3 Sonnet';
-      else if (model.contains('mistral'))
-        formattedModelName = 'Mistral 7B';
-      else
-        formattedModelName = model;
-      modelDisplay = 'RAG Powered | $formattedModelName';
-    }
-    return Text(modelDisplay,
-        style: GoogleFonts.robotoMono(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: Colors.white60,
-            letterSpacing: 0.5));
+  Widget _buildNanoBadge(AnalysisViewModel vm) {
+    final model = (vm.cachedMetadata?['modelUsed'] as String?) ?? 'AI V2';
+    String display = model.contains('flash') ? 'Gemini 2.5' : 'RAG Powered';
+    return Padding(
+      padding: const EdgeInsets.only(top: 2.0),
+      child: Text('$display // Live Analysis',
+          style: GoogleFonts.robotoMono(
+              fontSize: 10, color: Colors.cyanAccent.withOpacity(0.7))),
+    );
   }
 
-  Widget _buildMarkdownContent(
-      BuildContext context, AnalysisViewModel viewModel) {
-    if (viewModel.analysisText == null || viewModel.analysisText!.isEmpty) {
-      return const Text('Nessuna analisi disponibile.',
-          style: TextStyle(color: Colors.white70));
-    }
-    return DefaultTextStyle.merge(
-      textAlign: TextAlign.justify,
-      child: MarkdownBody(
-        data: viewModel.analysisText!,
-        styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-            .copyWith(h3: h3Style, strong: strongStyle, p: baseStyle),
-        builders: {'hr': HorizontalRuleBuilder()},
-        shrinkWrap: true,
+  Widget _buildMarkdownContent(BuildContext context, AnalysisViewModel vm) {
+    final h1Style = GoogleFonts.outfit(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: const Color(0xFFE0F7FA),
+        height: 2.0);
+    final h2Style = GoogleFonts.outfit(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: Colors.white70,
+        height: 1.8);
+    final bodyStyle = GoogleFonts.inter(
+        fontSize: 14, height: 1.6, color: Colors.white.withOpacity(0.85));
+    final numberStyle = GoogleFonts.robotoMono(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        color: const Color(0xFFFFD700));
+
+    return MarkdownBody(
+      data: vm.analysisText ?? "",
+      styleSheet: MarkdownStyleSheet(
+        h1: h1Style,
+        h2: h2Style,
+        p: bodyStyle,
+        strong: numberStyle,
+        listBullet: const TextStyle(color: Colors.cyanAccent, fontSize: 14),
+        listIndent: 12.0,
+        blockSpacing: 12.0,
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, AnalysisViewModel vm) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.redAccent, size: 28),
+          const SizedBox(height: 12),
+          Text(vm.errorText,
+              style: const TextStyle(color: Colors.white70),
+              textAlign: TextAlign.center),
+        ],
       ),
     );
   }

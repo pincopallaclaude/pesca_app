@@ -45,7 +45,7 @@ L'applicazione è uno strumento avanzato di previsioni meteo-marine per la pesca
 	1.5 Episodic Memory Engine (Hybrid DB: SQLite + ChromaDB)
 		Sistema di memoria a lungo termine per apprendimento continuo:
 		- **SQLite (better-sqlite3)**: Memoria episodica strutturata con indici ottimizzati per statistiche e metadati.
-		- **ChromaDB Service (API)**: Ricerca semantica su episodi passati delegata a microservizio esterno (V2 Architecture).
+		- **ChromaDB Service (API)**: Ricerca semantica su episodi passati delegata a microservizio esterno (V2 	).
 		- **Hot Cache (node-cache)**: Cache in-memory per query frequenti e dati meteo processati.
 		- **Automatic Cleanup**: Policy di aggregazione che mantiene DB snello archiviando episodi vecchi.
 		- **Feedback Loop**: Ogni feedback utente viene salvato e diventa training data per il ML.
@@ -238,7 +238,7 @@ Il pescaScore è evoluto da un sistema rule-based puro a un **sistema ibrido ML 
 		User richiede analisi → <50ms (da cache)
 		```
 
-	3.C - MACHINE LEARNING PIPELINE (v9.0)
+	3.C - MACHINE LEARNING PIPELINE (v10.0)
 		Sistema ML completamente automatizzato per training e inference:
 
 		**Training Pipeline (Offline - GitHub Actions):**
@@ -572,19 +572,54 @@ Strategia di caching a **quattro livelli** (aggiunto ML model cache) per perform
 			- `server.js`: Entry point minimale che invoca il bootstrap.
 
 	7.2 Frontend (pesca_app):
-		- La struttura MVVM è stata estesa per supportare il **ciclo di feedback** dell'utente.
-		- **Gestione Stato e Dati (Architettura MVVM):**
-			- `viewmodels/`: (Invariato)
-				- `forecast_viewmodel.dart`: Invariato.
-				- `analysis_viewmodel.dart`: La sua logica di avvio è stata modificata con un **ritardo strategico** per permettere all'analisi proattiva P.H.A.N.T.O.M. di funzionare.
-			- `services/`: (Esteso)
-				- `api_service.dart`: Arricchito con la nuova funzione `submitFeedback` per inviare i dati all'endpoint `/api/submit-feedback`.
-			- `widgets/`: (Esteso)
-				- `feedback_dialog.dart`:  Dialogo modale per raccogliere l'esito della pescata e la soddisfazione dell'utente.
-				- `main_hero_module.dart`: Modificato per includere un'icona/pulsante che **attiva il `FeedbackDialog`**.
-		- **Modelli:**
-			- `models/forecast_data.dart`: Aggiornato per includere un `sessionId`, fondamentale per collegare la previsione al feedback dell'utente.
-			
+		Architettura MVVM estesa con sistema di feedback utente e moduli UI avanzati.
+		
+		**Core Architecture:**
+		- `models/forecast_data.dart`: Modello dati principale con `sessionId` per tracking feedback.
+		- `services/`: Layer interazione sistemi esterni.
+		  - `api_service.dart`: Data Layer HTTP puro (REST calls + `submitFeedback`).
+		  - `cache_service.dart`: Motore persistenza locale (Hive, TTL management).
+		- `viewmodels/`: Business Logic (MVVM pattern).
+		  - `forecast_viewmodel.dart`: Orchestrator stato previsioni (Cache + API).
+		  - `analysis_viewmodel.dart`: Logic analisi AI a 3 fasi con ritardo strategico per P.H.A.N.T.O.M.
+		
+		**UI Modules:**
+		- `screens/`: Container di primo livello.
+		  - `forecast_screen.dart`: Initializer ViewModel + Overlay management.
+		  - `mission_control/`: Dashboard diagnostica real-time (metriche sistema, worker status, log terminal).
+		- `widgets/`: Componenti riutilizzabili.
+		  - `feedback_dialog.dart`: Form raccolta outcome pescata (rating, action, risultato).
+		  - `main_hero_module.dart`: Hero card con trigger FeedbackDialog.
+		  - `premium_drawer/`: Menu laterale olografico con effetti glassmorphism e telemetria HUD.
+		  - Core UI: `glassmorphism_card.dart`, `fishing_score_indicator.dart`, `score_chart_dialog.dart`.
+		
+		**7.2.1 Data-Driven Visual Engine (Live Diagram System)**
+		
+		Il sottosistema `live_diagram/` implementa un'architettura **Dichiarativa & Data-Driven** per la visualizzazione avanzata dei flussi dati interattivi, evolvendo da un approccio imperativo hardcoded.
+		
+		**Vantaggi Architetturali:**
+		
+		* **⚡ Scalabilità Zero-Code**: Nuovi moduli (es. MARINE) richiedono solo la definizione di un Scenario JSON-like; il motore grafico (`MlStoryRenderer`) interpreta ed esegue automaticamente senza codice Canvas custom.
+		
+		* **🛠️ Manutenibilità Chirurgica**: Disaccoppiamento totale tra "Cosa" (`data/`) e "Come" (`painters/`). Modifiche a primitive di rendering (es. stile linee neon) si propagano istantaneamente a tutti gli scenari presenti e futuri.
+		
+		* **📐 Coerenza Geometrica Assoluta**: `DiagramTopology` fornisce Single Source of Truth per coordinate spaziali. Widget UI e Canvas leggono dalla stessa fonte centrale, eliminando matematicamente i disallineamenti (pixel-perfect rendering).
+		
+		* **🤖 AI & Server-Driven Ready**: Lo Schema rigoroso predispone il sistema a scenari avanzati: animazioni generate da Agente AI o scaricate dinamicamente da Backend, permettendo aggiornamenti visivi senza nuove build dell'app.
+					
+					
+	**7.2.2 Diagram AI Agent & Semantic Console (v2.0)**
+
+	Il sistema `live_diagram/` è stato potenziato con un **Agente AI Locale dedicato** (`DiagramAIAgent`) che orchestra la visualizzazione topologica in tempo reale, eliminando la necessità di definire layout manuali.
+
+	* **Semantic-Aware Engine**: Il motore non si limita a disegnare nodi, ma *comprende* le relazioni semantiche. Utilizzando `SemanticEngine`, traduce intenti astratti (es. "Focus su MARINE") in topologie concrete, selezionando automaticamente il template di layout più adatto (Tree, Circular, Force-Directed) in base alla densità e al tipo di flusso (`real-time` vs `batch`).
+
+	* **Auto-Context Discovery**: Grazie ai metadati strutturati (`node_metadata.dart`), l'agente è capace di **"Context Expansion"**. Selezionando un singolo nodo, il sistema recupera e visualizza automaticamente l'intera catena di dipendenze critiche (es. Input API → Nodo Target → Output Agent) senza configurazione manuale.
+
+	* **Physics-Based Perception Layout**: Un motore fisico dedicato (`PhysicsEngine`) applica algoritmi *Force-Directed* con gestione attiva delle collisioni e gravità adattiva (`Adaptive Gravity`). Questo garantisce che i nodi si auto-organizzino nello spazio disponibile (`Viewport-Aware`), evitando sovrapposizioni con etichette o flussi, indipendentemente dalle dimensioni dello schermo.
+
+	* **Unified Geometry Pipeline**: L'agente pre-calcola curve di Bézier deterministiche (`BezierUtils`) che fungono da *Single Source of Truth*. Questo assicura una sincronizzazione matematica perfetta (pixel-perfect) tra il layer strutturale ("Ghost Paths") e il layer di animazione particellare ("Neon Flows"), risolvendo disallineamenti visivi complessi.
+
 			
 	7.3 FLUSSO: Richiesta Previsioni con Analisi Proattiva (P.H.A.N.T.O.M. v2.0)
 		```
@@ -677,98 +712,7 @@ Strategia di caching a **quattro livelli** (aggiunto ML model cache) per perform
 		```
 
 	7.5 FLUSSO: Feedback Loop & ML Training
-		```
-		1. User: Completa sessione di pesca
-		         ↓
-		2. App: Mostra Feedback Dialog (Miglioria 9 UX)
-		   - Rating: 1-5 stelle
-		   - Deep Dive: Se Rating < 3, mostra dropdown "Motivo errore" (es. "Condizioni diverse")
-		   - Action: "Went fishing" | "Stayed home"
-		   - Outcome: "Successful" | "Poor"
-		         ↓
-		3. POST /api/submit-feedback
-		   Body: { 
-			 sessionId, location_lat, location_lon, weather_json, 
-			 pescaScorePredicted, user_feedback, outcome, feedback_reason 
-		   }
-		   -> Validazione Schema (Zod)
-		   -> Anomaly Detection (rating vs outcome mismatch)
-				 ↓
-		4. Memory Engine: Hybrid Write
-		   ├─ SQLite: INSERT con data_quality_score & quality_warnings
-		   ├─ ChromaDB: Add embedding
-		   └─ Hot Cache: Invalidate
-		         ↓
-		5. [ACCUMULATION] Feedback salvati: 150 episodi
-		         ↓
-		6. [TRIGGER] Cron mensile o manuale
-		   GitHub Actions: train-ml-model.yml
-		         ↓
-		7. Workflow Steps:
-		   ├─ Export: GET /api/admin/export-episodes
-		   ├─ Python: train_model.py
-		   │   ├─ Load episodes JSON
-		   │   ├─ Feature engineering (13 features)
-		   │   ├─ Train GradientBoostingRegressor
-		   │   └─ Evaluate (MSE, R²)
-		   ├─ Python: convert_to_onnx.py
-		   │   └─ sklearn → ONNX format
-		   └─ Upload: GitHub Release (pesca_model.onnx)
-		         ↓
-		8. Webhook: POST /api/admin/reload-ml-model
-		         ↓
-		9. Server: Re-load ONNX model from disk
-		   Model version: 1.0 → 2.0
-		         ↓
-		10. Next Predictions: Use new model
-		    Higher confidence, better accuracy
-		         ↓
-		11. User Experience: More accurate pescaScore
-		         ↓
-		12. More Positive Feedback → Loop continues ♻️
-		```
-
-	7.6 FLUSSO: Memory Cleanup Policy (Mensile)
-		```
-		1. [TRIGGER] Cron-job.org (1° del mese, 3 AM)
-		   GET /api/admin/cleanup-memory
-		   Header: Authorization: Bearer <ADMIN_TOKEN>
-		         ↓
-		2. Memory Engine: runCleanupPolicy()
-		         ↓
-		3. Identify Old Episodes:
-		   SELECT * FROM fishing_episodes
-		   WHERE created_at < (NOW - 90 days)
-		   Result: 450 episodi da archiviare
-		         ↓
-		4. Aggregate Statistics:
-		   INSERT INTO aggregated_stats
-		   SELECT 
-		     location_zone,
-		     AVG(pesca_score_final),
-		     AVG(user_feedback),
-		     COUNT(*)
-		   FROM old_episodes
-		   GROUP BY location_zone
-		         ↓
-		5. Delete from ChromaDB:
-		   episodesCollection.delete({ids: [...]})
-		         ↓
-		6. Delete from SQLite:
-		   DELETE FROM fishing_episodes WHERE created_at < cutoff
-		         ↓
-		7. VACUUM: Recupera spazio disco
-		   SQLite: VACUUM command
-		   Freed: 120MB
-		         ↓
-		8. Response: {
-		     success: true,
-		     archived: 450,
-		     space_freed_mb: 120
-		   }
-		         ↓
-		9. Database size: 850MB (sotto limite 1GB) ✅
-		```			
+		8881
 
 
 ---
@@ -1374,7 +1318,10 @@ TOTAL MONTHLY COST                                 €0.00 ✅           ZERO CO
 
 ---
 
-## STRUTTURA DETTAGLIATA DEL PROGETTO
+
+---
+### 12. STRUTTURA DETTAGLIATA DEL PROGETTO
+---
 
 ### Frontend: `pesca_app`
 La seguente è una rappresentazione commentata della struttura attuale del progetto frontend:
@@ -1431,29 +1378,64 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |-- lib/ # Cuore dell'applicazione. Contiene tutto il codice sorgente Dart.
 |   |-- models/ # Definisce le strutture dati (POJO/PODO).
 |   |   |-- forecast_data.dart # Modello dati core. Delinea la struttura dell'intero payload JSON ricevuto dal backend, inclusi dati orari, giornalieri, astronomici e di pesca.
-|   |-- screens/ # Componenti di primo livello che rappresentano un'intera schermata. 
-|   |   |-- mission_control/              # Moduli Dashboard
-|   |   |   |-- models.dart               # Dati (WorkerStatus, LogEntry)
-|   |   |   |-- painters.dart             # CustomPainters (Grid, Plasma)
-|   |   |   |-- mission_control_screen.dart # Presentation Layer (gestisce l'assemblaggio dei widget, le animazioni grafiche (parallasse, flusso) e il binding con il ViewModel, senza contenere più logica di business)
-|   |   |   |-- mission_control_view_model.dart # Gestisce la business logic della dashboard, separando i dati dalla UI. Contiene lo stato reattivo (ChangeNotifier), i timer per la simulazione realtime delle metriche (latenza, carico CPU, log) e le funzioni di controllo per l'interattività dei widget.
-|   |   |   |-- widgets/
-|   |   |   |	|-- core_widgets.dart     # Widget Base (PlatinumCard, SectionLabel)
+|   |-- screens/ # Componenti di primo livello che rappresentano un'intera schermata.
+|   |   |-- mission_control/ # Moduli Dashboard
+|   |   |   |-- widgets/ # 
+|   |   |   |   |-- core_widgets.dart # Widget Base (PlatinumCard, SectionLabel)
 |   |   |   |   |-- diagnostic_widgets.dart # Threat Gauge, CPU/Mem Rows
 |   |   |   |   |-- infrastructure_widgets.dart # SQLite/Chroma status, Cron jobs
-|   |   |   |   |-- log_widgets.dart      # Terminal log viewer
-|   |   |   |   |-- network_widgets.dart  # Latency card, IO stats
-|   |   |   |   |-- worker_widgets.dart   # 3D Worker Rows
+|   |   |   |   |-- log_widgets.dart # Terminal log viewer
+|   |   |   |   |-- mission_header.dart # Componente UI dedicato alla testata della dashboard (gestisce navigazione, branding e indicatori di stato del sistema)
+|   |   |   |   |-- network_widgets.dart # Latency card, IO stats
+|   |   |   |   |-- worker_widgets.dart # 3D Worker Rows
+|   |   |   |-- mission_control_screen.dart # Presentation Layer (gestisce l'assemblaggio dei widget, le animazioni grafiche (parallasse, flusso) e il binding con il ViewModel, senza contenere più logica di business)
+|   |   |   |-- mission_control_view_model.dart # Gestisce la business logic della dashboard, separando i dati dalla UI. Contiene lo stato reattivo (ChangeNotifier), i timer per la simulazione realtime delle metriche (latenza, carico CPU, log) e le funzioni di controllo per l'interattività dei widget.
+|   |   |   |-- models.dart # Dati (WorkerStatus, LogEntry)
+|   |   |   |-- painters.dart # CustomPainters (Grid, Plasma)
 |   |   |-- forecast_screen.dart # "Container" di primo livello. La sua responsabilità è unicamente inizializzare e "possedere" i ViewModel e gestire la presentazione degli Overlay (es. SearchOverlay), senza contenere logica di business.
 |   |-- services/ # Moduli dedicati alle interazioni con sistemi esterni.
 |   |   |-- api_service.dart # Il "Data Layer" di rete. Aderisce al Principio di Singola Responsabilità: il suo UNICO compito è eseguire chiamate HTTP al backend e restituire risposte grezze (solitamente Map<String, dynamic>), senza logica di caching o di business.
 |   |   |-- cache_service.dart # [CHIAVE-ARCHITETTURA] Il "Cervello della Cache". Centralizza TUTTA la logica di persistenza locale (lettura, scrittura, TTL) tramite Hive.
-|   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili. 
+|   |-- utils/ # Funzioni helper pure, stateless e riutilizzabili.
 |   |   |-- weather_icon_mapper.dart # Traduttore di codici meteo in icone e colori.
 |   |-- viewmodels/ # Contiene i "cervelli" della nostra UI (Pattern: ViewModel). Incapsulano la logica di stato e di business, disaccoppiandola dalla UI.
-|   |   |-- forecast_viewmodel.dart # Il gestore dello stato e della logica di business per la schermata principale. Orchestra CacheServiceeApiService per recuperare i dati e li processa per la UI.
 |   |   |-- analysis_viewmodel.dart # Il "cervello" dell'analisi AI. Incapsula tutta la logica a 3 fasi (cache locale -> cache backend -> fallback) e gestisce lo stato (_currentState, _analysisText, _errorText, _cachedMetadata), notificando la AnalysisView dei cambiamenti.
+|   |   |-- forecast_viewmodel.dart # Il gestore dello stato e della logica di business per la schermata principale. Orchestra CacheServiceeApiService per recuperare i dati e li processa per la UI.
 |   |-- widgets/ # Componenti UI riutilizzabili (mattoni dell'interfaccia).
+|   |   |-- live_diagram/ # Sottosistema grafico avanzato per la visualizzazione dei flussi dati interattivi.
+|   |   |   |-- ai/ #
+|   |   |   |   |-- geometry/ #
+|   |   |   |   |   |-- curve_optimizer.dart # Geometry Engine (implementa algoritmi iterativi per l'ottimizzazione di curve di Bézier quadratiche, minimizzando le intersezioni e massimizzando la fluidità visiva dei flussi)
+|   |   |   |   |-- models/ #
+|   |   |   |   |   |-- node_metadata.dart # Data Registry (definisce il vocabolario semantico dell'architettura; mappa ogni nodo a categorie, colori, ingombri fisici per le collisioni e connessioni tipiche suggerite)
+|   |   |   |   |-- diagram_ai_agent.dart # Autonomous Orchestrator (coordina l'intero ciclo di vita dei diagrammi: dalla risoluzione dei nodi tramite il SemanticEngine alla generazione sincronizzata di flussi neon e label, applicando ottimizzazioni topologiche "viewport-aware" e algoritmi di force-directed layout)
+|   |   |   |   |-- quality_metrics.dart # Analytics Engine (sistema di scoring composito che valuta matematicamente l'efficacia del layout basandosi su bilanciamento spaziale, uniformità dei segmenti e leggibilità)
+|   |   |   |   |-- scenario_request_v2.dart # Protocol Layer (definisce il contratto evoluto per la generazione degli scenari AI; supporta tag semantici, preset di qualità e parametri "viewport-aware" per layout adattivi)
+|   |   |   |   |-- semantic_engine.dart # Intelligence Layer (motore di inferenza che interpreta i ruoli dei nodi per espandere il contesto del grafo, suggerire connessioni implicite e selezionare i template di layout più idonei)
+|   |   |   |   |-- viewport_layout_engine.dart # Responsive Core (gestisce il calcolo dinamico di margini, raggi di collisione e spaziatura basandosi sulle dimensioni reali dello schermo e sulla densità degli elementi)
+|   |   |   |-- components/ # Layer dei Widget UI (Overlay interattivi sovrapposti al Canvas).
+|   |   |   |   |-- diagram_nodes.dart #UI Component Library (raccolta di widget specializzati per la rappresentazione dei nodi: include AgentNode con animazioni glow, WorkerNode con indicatori di carico e NodeDetailOverlay, un terminale interattivo che visualizza i metadati semantici in tempo reale)
+|   |   |   |   |-- diagram_overlay_builder.dart # Scene Orchestrator (gestisce il posizionamento dinamico e le animazioni di transizione dei nodi; implementa la logica di "interpolation" spaziale tra le coordinate standard e quelle generate dall'AI Agent, orchestrando il fading dei worker e l'interattività dell'interfaccia tramite InteractiveNode)
+|   |   |   |-- data/ # Configuration Layer (Il "DNA" delle animazioni).
+|   |   |   |   |-- ml_scenario.dart # Configurazione dichiarativa (JSON-like) dello scenario "ML Model" (Timeline, Geometria, Effetti).
+|   |   |   |-- examples/ #
+|   |   |   |   |-- ai_agent_example.dart # Implementation Reference (dimostra l'uso pratico dell'Agente AI attraverso 5 scenari chiave: dalla creazione di flussi "Marine" real-time all'ottimizzazione di topologie complesse con preset di qualità "Premium", fungendo da test suite per la validazione iterativa delle scene)
+|   |   |   |-- logic/ # Business Logic e Matematica.
+|   |   |   |   |-- diagram_registry.dart # Registry centrale che mappa gli ID dei nodi ai rispettivi Scenari di animazione.
+|   |   |   |   |-- diagram_registry_enhanced.dart # Orchestration Registry (estensione del registro centrale che integra l'agente AI per la validazione automatica, l'ottimizzazione real-time e l'auto-generazione di scenari basati sulla topologia)
+|   |   |   |   |-- diagram_topology.dart # "Single Source of Truth" per le coordinate geometriche responsive (Standard Tree vs Diamond Layout).
+|   |   |   |   |-- geometry_engine.dart # Core Logic (gestisce i calcoli matematici e geometrici per il posizionamento dei nodi, le collisioni e la generazione delle traiettorie dei flussi)
+|   |   |   |   |-- layout_engine.dart # Orchestration Layer (responsabile dell'algoritmo di distribuzione spaziale e del bilanciamento visivo della topologia del diagramma in tempo reale)
+|   |   |   |-- painters/ # Rendering Layer (Logica di disegno su Canvas).
+|   |   |   |   |-- flow_diagram_painter.dart # Main Dispatcher: disegna le connessioni standard e delega gli scenari attivi al Renderer specifico.
+|   |   |   |   |-- ml_story_renderer.dart # Rendering Engine Generico: interpreta i dati dello Schema (fasi, trigger, primitive) per disegnare l'animazione.
+|   |   |   |-- schema/ # Data Definition Layer.
+|   |   |   |   |-- diagram_schema.dart # Definisce la grammatica del sistema (Classi per StoryPhase, NeonFlow, VisualElement, ecc.).
+|   |   |   |-- ui/ #
+|   |   |   |   |-- diagram_ai_button.dart # UI Component (trigger d'accesso globale alla console AI; incapsula l'attivazione del sistema di intelligenza artificiale sul diagramma)
+|   |   |   |   |-- diagram_ai_console.dart # UI Dashboard (terminale interattivo per la gestione avanzata degli agenti AI, validazione scenari, export del codice e telemetria)
+|   |   |   |   |-- diagram_ai_dialogs.dart # UI Layer (gestisce le finestre modali interattive per la creazione e configurazione dei nuovi scenari tramite input utente)
+|   |   |   |-- live_flow_diagram.dart # Orchestrator Widget. Gestisce il ciclo di vita, i controller di animazione e lo stato "Data-Driven".
 |   |   |-- premium_drawer/ # Modulo UI per il menu laterale "Extra Platinum" con effetti olografici.
 |   |   |   |-- drawer_footer_widgets.dart # Componente footer stile HUD che visualizza telemetria real-time (Lat/Lon/RAM) e stato di sicurezza.
 |   |   |   |-- drawer_header_widgets.dart # Intestazione animata con effetto laser "Scanline" continuo e branding olografico.
@@ -1474,9 +1456,9 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |   |-- forecast_view.dart # Il "corpo" visivo della ForecastScreen. Ascolta il ForecastViewModel e mostra lo stato di caricamento, errore o i dati.
 |   |   |-- glassmorphism_card.dart # Il "pilastro" del Design System. Widget riutilizzabile per l'effetto vetro.
 |   |   |-- hourly_forecast.dart # Widget tabellare per le previsioni orarie.
-|   |   |-- live_flow_diagram.dart # Widget principale che orchestra il diagramma interattivo, gestendo lo stato di selezione dei nodi, l'animazione parallasse e la logica di isolamento semantico (dimming).
-|   |   |-- live_flow_diagram_nodes.dart # Libreria di componenti UI riutilizzabili per i nodi del grafo (Agenti, DB, Worker) e l'overlay del terminale olografico
-|   |   |-- live_flow_diagram_painter.dart # Motore grafico CustomPainter che disegna le connessioni al neon, le curve di Bezier e le particelle dati animate tra i nodi.
+|   |   |-- live_flow_diagram.dart # Main Visual Controller (il punto di ingresso del sottosistema; orchestra gli stati di animazione, gestisce la logica di selezione dei nodi e il "dimming" data-driven, integrando i layer di rendering CustomPaint con la logica dinamica del DiagramRegistryEnhanced)
+|   |   |-- live_flow_diagram_nodes.dart # UI Component Library (fornisce i widget atomici del sistema: dall' AgentNode con animazione a pulsazione al WorkerNode con barra di carico; include l' InteractiveNode per la gestione degli stati di opacità e il NodeDetailOverlay, un terminale in stile hacker per la visualizzazione dei metadati in tempo reale dei singoli servizi)
+|   |   |-- live_flow_diagram_painter.dart # Rendering Core (gestisce il disegno procedurale delle connessioni tramite curve di Bézier cubiche; implementa un sistema di particelle animate che variano in velocità e spessore in base al load dei singoli worker, includendo effetti di glow neon e filtri di sfocatura dinamici per l'interfaccia Mission Control)
 |   |   |-- location_services_dialog.dart # Dialogo per la gestione dei permessi di localizzazione.
 |   |   |-- main_hero_module.dart # Componente principale che mostra i dati salienti e ospita il trigger per l'analisi AI.
 |   |   |-- score_chart_dialog.dart # Dataviz interattivo per il grafico del pescaScore.
@@ -1484,7 +1466,7 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |   |-- search_overlay.dart # Layer UI per la ricerca di località.
 |   |   |-- stale_data_dialog.dart # Dialogo di fallback per dati in cache obsoleti.
 |   |   |-- system_metrics.dart # Widget per la visualizzazione delle metriche di sistema (CPU, RAM, Latenza) con grafici Plasma e indicatori di stato.
-|   |   |-- weekly_forecast.dart # Dataviz per le previsioni settimanali. 
+|   |   |-- weekly_forecast.dart # Dataviz per le previsioni settimanali.
 |-- main.dart # Il punto di ingresso e orchestratore. Inizializza l'app, apre i "box" di Hive, e registra/pianifica il task di aggiornamento in background tramite Workmanager.
 |-- linux/ # Wrapper nativo Linux.
 | 	|-- flutter
@@ -1535,14 +1517,16 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 
 ```
 |-- .github/ # Contiene i workflow di automazione CI/CD
-|   |-- workflows/ # File di configurazione per GitHub Actions
-|   |   |-- train-ml-model.yml # Workflow CI/CD per l'addestramento e l'aggiornamento del modello di Machine Learning (ML).
-|   |   |-- update-kb.yml # Workflow CI che, alla modifica di `sources.json`, lancia la data-pipeline per aggiornare la Knowledge Base (`knowledge_base.json`).
+|   |-- benchmark.yml/ # # CI/CD Performance Monitoring (automatizza i test di carico settimanali su Node.js 20.x, eseguendo benchmark specifici e archiviando i risultati come artefatti JSON per monitorare regressioni di velocità nelle API core).
+|   |-- test-multi-agent.yml/ # Multi-Agent CI Pipeline (gestisce la validazione continua dei sistemi multi-agente; esegue unit e integration test su Node.js 20.x, verifica la soglia minima di coverage all'80% e conclude con un health check degli endpoint API critici per l'agente).
+|   |-- train-ml-model.yml # Workflow CI/CD per l'addestramento e l'aggiornamento del modello di Machine Learning (ML).
+|   |-- update-kb.yml # Workflow CI che, alla modifica di `sources.json`, lancia la data-pipeline per aggiornare la Knowledge Base (`knowledge_base.json`).
 |-- api/ # Handler degli endpoint REST. La logica è mantenuta leggera e delegata ai servizi.
 |   |-- admin/ # Endpoint amministrativi per la manutenzione del sistema.
 |   |   |-- cleanup-memory.js # Handler per l'esecuzione manuale della policy di pulizia della memoria (SQLite e ChromaDB).
 |   |   |-- export-episodes.js # Handler per l'esportazione dei dati storici degli episodi di pesca.
 |   |   |-- ml-metrics.js # Endpoint monitoraggio performance ML e risorse 
+|   |-- agent-health.js # 
 |   |-- analyze-day-fallback.js # Endpoint per attivare l'analisi AI in modalità fallback o su richiesta esplicita (non tramite logica automatica).
 |   |-- autocomplete.js # Gestisce i suggerimenti di località basati sull'input dell'utente.
 |   |-- memory-health.js # Restituisce lo stato di salute e le statistiche del sistema di memoria (SQLite e ChromaDB).
@@ -1551,34 +1535,37 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |   |-- reverse-geocode.js # Esegue la geolocalizzazione inversa (conversione di coordinate in nome località).
 |   |-- submit-feedback.js # Handler per l'invio del feedback degli utenti sull'accuratezza delle analisi AI.
 |-- data/ # Contiene dati persistenti e file generati in runtime dall'applicazione. E' stata creata per supportare il test [eventualmente da rimuovere in un secondo momento]
-|   |-- data/ #
 |   |-- memory/ #
-|   |-- ml/ #
+|   |   |-- episodies.db/ # Persistent Memory Store (database SQLite che funge da memoria a lungo termine per gli agenti; archivia lo storico delle sessioni di pesca, i pattern meteorologici e i feedback utente, permettendo al sistema di migliorare le predizioni tramite dati storici e indici ottimizzati).
+|   |-- memory/ #
+|   |   |-- model_metadata.json/ # ...da cancellare
+|   |   |-- pesca_model.onnx/ # Neural Inference Engine (modello in formato ONNX per l'inferenza cross-platform; implementa la logica predittiva basata sulle 13 feature definite nei metadati per generare in tempo reale il punteggio di probabilità di cattura).
+|   |   |-- scaler.json/ # Data Normalization Registry (contiene i parametri statistici di media e deviazione standard per le 13 feature del modello; essenziale per il preprocessing dei dati ambientali real-time, garantendo che gli input abbiano la stessa scala utilizzata durante il training del modello ONNX). 
 -- lib/ # Core dell'applicazione: logica di business, servizi, utilità.
 |   |-- agents/ # 
 |   |   |-- orchestrator/ # Moduli di supporto specifici per l'agente di pesca.
-|   |   |   |-- super.agent.js # Super Agent Orchestrator (Cervello Centrale)
-|   |   |   |-- routing.strategy.js # Logica di routing e decomposizione query
 |   |   |   |-- response.aggregator.js # Aggregazione risposte dai Workers
+|   |   |   |-- routing.strategy.js # Logica di routing e decomposizione query
+|   |   |   |-- super.agent.js # Super Agent Orchestrator (Cervello Centrale)
+|   |   |-- shared/ # 
+|   |   |   |-- base.worker.js # Classe astratta base per tutti i Workers
+|   |   |   |-- context.builder.js # Builder per contesti specializzati
+|   |   |   |-- tool.registry.js # Registry dei tool disponibili per ogni Worker
 |   |   |-- workers/ # 
-|   |   |   |-- meteo.analyst.js # Specialista Analisi Meteorologica
 |   |   |   |-- gear.strategist.js # Specialista Attrezzatura & Tecniche
 |   |   |   |-- marine.specialist.js # Specialista Condizioni Marine
 |   |   |   |-- memory.retriever.js # Specialista Ricerca Memoria Episodica
+|   |   |   |-- meteo.analyst.js # Specialista Analisi Meteorologica
 |   |   |   |-- species.advisor.js # Specialista Raccomandazioni Specie
-|   |   |-- shared/ # 
-|   |   |   |-- base.worker.js # Classe astratta base per tutti i Workers
-|   |   |   |-- tool.registry.js # Registry dei tool disponibili per ogni Worker
-|   |   |   |-- context.builder.js # Builder per contesti specializzati
 |   |-- core/ # Nucleo centrale dell'infrastruttura server.
 |   |   |-- server/
 |   |   |   |-- bootstrap.js # Inizializzazione sequenziale dei servizi critici (DB, ML, MCP).
 |   |   |   |-- routes.js # Definizione e registrazione di tutte le rotte API.
 |   |-- db/ # Gestione del database persistente.
 |   |   |-- memory/ # Componenti interni del sistema di memoria.
+|   |   |   |-- cache_manager.js # Gestione della cache in-memory (Hot Cache).
 |   |   |   |-- chroma_client.js # Client HTTP per operazioni semantiche su ChromaDB.
 |   |   |   |-- sqlite_client.js # Gestione schema e query strutturate su SQLite.
-|   |   |   |-- cache_manager.js # Gestione della cache in-memory (Hot Cache).
 |   |   |-- memory.engine.js # Orchestratore: coordina SQLite, Chroma e Cache.
 |   |-- domain/ # Logica di business pura e calcoli specifici del dominio "pesca".
 |   |   |-- forecast.assembler.js # Assembla e normalizza i dati grezzi provenienti da tutte le API meteo in un formato JSON strutturato unico.
@@ -1644,17 +1631,20 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 |-- tools/ # Script di supporto, pipeline dati e utilità per la manutenzione.
 |   |-- convert_to_onnx.py # Script Python per convertire il modello ML allenato nel formato ONNX per l'ottimizzazione e il deploy.
 |   |-- data-pipeline.js # Script eseguito da GitHub Actions per pre-processare le fonti dati e generare il file `knowledge_base.json`.
+|   |-- debug-routing.js # AI Orchestration Diagnostic Tool (utility CLI per testare la logica di smistamento del superAgent senza attivare l'intera infrastruttura; visualizza graficamente l'intento rilevato, la sequenza di worker selezionati e il "reasoning" dietro la scelta del percorso di routing).
+|   |-- generate-coverage-report.js # CI Quality Assurance Utility (analizza i risultati dei test e genera una dashboard testuale della copertura del codice; visualizza metriche su linee, funzioni e rami, applicando indicatori visuali ✅/⚠️/❌ per monitorare il rispetto della soglia critica dell'80% definita nel workflow di CI).
 |   |-- inspect-chroma.js # Script di utilità per interrogare e ispezionare manualmente lo stato del server ChromaDB (debug).
 |   |-- Project_lib_extract.ps1 # Script PowerShell per estrarre o analizzare la struttura della libreria (`lib/`).
 |   |-- train_model.py # Script Python per l'addestramento e la valutazione del modello di Machine Learning.
 |   |-- Update-ProjectDocs.ps1 # Script PowerShell per l'aggiornamento automatico della documentazione di progetto (es. README).
+|-- venv/ ...contains several subfolders
 |-- .dockerignore # Specifica i file da ignorare durante la creazione dell'immagine Docker.
-|-- .env # File per le variabili d'ambiente locali (API keys, etc.) - NON COMMETTERE MAI SU GIT.
-|-- .gitignore #
-|-- docker-compose.yml #
+|-- .env # File per le variabili d'ambiente locali (API keys, etc.) - NON COMMITTARE MAI SU GIT.
+|-- .gitignore # Environment & Privacy Guard (impedisce il tracciamento di file sensibili e dati locali; esclude la cartella /data/ per evitare l'invio di database pesanti o modelli ML al repository e il file .env per proteggere chiavi API e segreti di configurazione).
+|-- docker-compose.yml # Infrastructure Orchestration (configura il container per ChromaDB versione "latest"; mappa la porta 8001 per il backend, abilita la persistenza dei dati vettoriali tramite volumi locali e disabilita la telemetria anonima per garantire la privacy nello sviluppo).
 |-- Dockerfile # Definisce l'ambiente del container per Render (include Node.js e dipendenze Python per Chroma).
 |-- knowledge_base.json # "Source of truth" per la KB, generato da CI/CD e usato per la migrazione automatica.
-|-- package-lock.json #
+|-- package-lock.json # Dependency Tree Manifest (file di blocco che garantisce installazioni deterministiche bloccando le versioni esatte di SDK AI come Anthropic, Google Generative AI e Mistral, oltre a librerie core come express v5.1 e onnxruntime-node).
 |-- package.json # Definisce le dipendenze npm e gli script del progetto.
 |-- server.js # Entry point minimale: avvia il bootstrap e il listener HTTP.
 |-- sources.json # "Telecomando" dell'AI: le sue modifiche su Git innescano l'aggiornamento della KB.
@@ -1676,34 +1666,35 @@ La seguente è una rappresentazione commentata della struttura attuale del proge
 
 ## 👻 Architettura P.H.A.N.T.O.M. v10.0 (Multi-Agent System)
 
-Il sistema **P.H.A.N.T.O.M.** è un'architettura **Multi-Agent Ibrida** che orchestra intelligenza matematica locale (Edge AI) e capacità di ragionamento linguistico in cloud (LLM).
+Il sistema **P.H.A.N.T.O.M.** (Proactive Hyper-localized Awaited-knowledge Networked Targeting & Optimization Model): un'architettura Multi-Agent Ibrida che unisce Edge AI e LLM Cloud per pre-calcolare le analisi in background, 
+offrendo all'utente risposte immediate (<50ms) e localizzate.
 
 Per comprendere il flusso logico, analizziamo cosa accade dietro le quinte con un esempio reale:
 
-> **Richiesta Utente:** *"Che pesce posso pescare domani mattina a Posillipo e perché?"*
+> **Azione Utente:** *" Seleziona una località (di default Posillipo) nella schermata principale dell'App?"*
 
 *   **Nota:** Attualmente questa interazione è gestita su tre livelli:
-*   **Implicita (UI):** La selezione di una località nell'App viene tradotta automaticamente nell'intent di analisi ("Analizza oggi/domani").
-*   **Simulata (Background):** Il servizio proattivo (`proactive_analysis.service.js`) simula periodicamente queste query specifiche per pre-calcolare gli insight tramite il Super Agent.
-*   **Nativa (Backend):** L'endpoint `/api/query` supporta già il linguaggio naturale, rendendo l'architettura pronta per future interfacce Chat o Voice senza refactoring.
+*   **Implicita (UI):** La selezione di una località nell'App viene tradotta automaticamente nell'intent di analisi ("Analizza condizioni, specie e strategie per domani a Posillipo").
+*   **Simulata (Background):** Un job attiva il servizio proactive_analysis.service.js che agisce come un "Fantasma", simulando query utente per le località popolari. Questo processo pre-calcola il lavoro pesante (Meteo, RAG, ML) e lo salva in cache, garantendo all'utente reale risposte istantanee (<50ms) ed eliminando l'attesa tipica dell'elaborazione live.
+*   **Nativa (Backend):** L'endpoint `/api/query` supporta già il linguaggio naturale, rendendo l'architettura pronta per future interfacce Chat o Voice senza refactoring.Enricvo 
 
 ---
 
 ### 1. 🌡️ Il Termometro della Realtà (ML Predittivo Locale)
-Prima che gli agenti inizino a "pensare", il sistema stabilisce oggettivamente la qualità della giornata.
+Prima che gli agenti inizino a "pensare", il sistema stabilisce oggettivamente la qualità della giornata
 
 *   **L'Azione:** Il sistema alimenta il modello **Machine Learning locale** (`pesca_model.onnx`) con i dati meteo grezzi (Vento 15km/h, onde 0.8m, ecc.), che in questa fase sono recuperati tramite WeatherService.
 *   **Il Dato (PescaScore):** Il modello calcola istantaneamente un punteggio, es. **7.8/10**. Non "pensa" come un umano, ma applica una formula statistica complessa (*Gradient Boosting*) basata su migliaia di bivi decisionali appresi dallo storico.
 *   **Cold Start:** Attualmente il modello è un "Seed Model" (addestrato su regole euristiche sintetiche). Man mano che gli utenti invieranno feedback reali, un workflow automatico (GitHub Actions) ri-addestrerà mensilmente il modello sulla realtà accumulata in SQLite.
 *   **Il Vincolo:** Questo voto (**7.8**) viene imposto a tutti i Workers: nessuno può consigliare strategie fallimentari se la matematica dice che le condizioni sono buone, e viceversa.
-
+*   Si tratta di un giudice imparziale che guarda i dati prima che l'AI inizi a parlare, garantendo che i consigli siano sempre ancorati alla realtà fisica (meteo) e storica (feedback), e non alla "fantasia" del modello linguistico.
 ---
 
 ### 2. 🧠 Il Cervello Centrale (Super Agent Orchestrator)
 Ora che abbiamo il "voto" oggettivo, entra in gioco il **Super Agent** (Node.js), che organizza il lavoro intellettuale.
 
-*   **Routing Intelligente:** Analizza la richiesta (*"pesce"*, *"domani"*, *"Posillipo"*) e comprende che serve una strategia complessa.
-*   **Reclutamento:** Attiva in parallelo solo gli **Specialisti (Workers)** necessari, fornendo loro il PescaScore come guida:
+*   **Routing Intelligente:** Quando arriva una richiesta ("Che pesce pesco domani a Posillipo?"), il Super Agent la smonta Analizza la richiesta (*"pesce"*, *"domani"*, *"Posillipo"*) e comprende che serve una strategia complessa.
+*   **Reclutamento:** Attiva in parallelo solo gli **Specialisti (Workers)** necessari, fornendo loro il PescaScore come guida (se la domanda fosse stata solo "A che ora sorge il sole?", il Super Agent avrebbe attivato solo il MeteoAnalyst, risparmiando risorse.):
     *   `MeteoAnalyst`: Per i trend barometrici (da API OpenMeteo recupera dati live: pressione, vento, pioggia.)
     *   `MarineSpecialist`: Per lo stato del mare e le correnti (da API Marine recupera dati live: altezza onde, correnti)
     *   `SpeciesAdvisor`: Per la biologia delle prede (da ChromaDB (RAG) conoscenza statica: manuali, biologia, abitudini pesci)
@@ -1736,3 +1727,272 @@ Qui avviene l'interazione finale tra "Corpo" (Codice) e "Mente" (LLM).
 *   **Resilienza:** Se un Worker fallisce, il Super Agent fornisce una risposta parziale (Graceful Degradation).
 *   **Velocità Proattiva:** Di notte il sistema pre-calcola le analisi, permettendo risposte istantanee (<50ms) all'apertura dell'app.
 *   **Zero-Cost:** Uso esclusivo di risorse Free Tier (Render, GitHub, Gemini) per sostenibilità totale.
+
+
+
+
+
+
+
+>>> PERCHE' - NON MCP <<<
+
+
+No, il progetto non implementa il Model Context Protocol (MCP) nel senso formale dello standard Anthropic.
+Sebbene esista una cartella /mcp con "resources" e "tools", e il documento menzioni "MCP Client", l'architettura reale è un sistema proprietario multi-agent (P.H.A.N.T.O.M.) che:
+
+1. Usa pattern simili (tool calling, risorse strutturate) ma senza il protocollo MCP standard
+2. Gli "strumenti" sono funzioni JavaScript locali, non server MCP esterni via stdio/SSE
+3. L'orchestrazione è gestita da un Super Agent custom in Node.js, non da un client MCP certificato
+4. La comunicazione con gli LLM avviene tramite API dirette (Gemini/Mistral), non attraverso il layer MCP
+
+In sintesi: ispirato concettualmente da MCP, ma implementato come architettura proprietaria senza conformità al protocollo.
+
+Per un MVP MCP-compliant servirebbero:
+
+1. MCP Server separato (Node.js/Python) che espone i tool via stdio/SSE secondo lo standard Anthropic
+2. Rimappare i tool esistenti (search_similar_episodes, search_knowledge_base, etc.) come MCP Tools con schema JSON formale
+3. Esporre le risorse (ChromaDB, SQLite) come MCP Resources (kb://, memory://) con URI standard
+4. Client MCP certificato che sostituisca l'attuale Super Agent, usando @modelcontextprotocol/sdk
+5. Separare orchestrazione: il backend Express diventerebbe un client che chiama il server MCP, non più orchestratore diretto
+5. Modificare comunicazione LLM: Claude API invece di Gemini (per sfruttare il tool calling nativo MCP di Anthropic)
+
+
+
+
+
+
+
+
+
+>>> SPIEGAZIONE DELLA SINTESI
+
+########################### 1. 🌡️ Il Termometro della Realtà (ML Predittivo Locale) ###########################
+
+Immagina questo componente come un **calcolatore scientifico** ultra-veloce che vive direttamente sul server. A differenza di ChatGPT o Gemini, che *ragionano* sulle parole, questo modulo *calcola* sui numeri. Usa un file chiamato `pesca_model.onnx` che contiene una "matrice matematica" congelata.
+
+### 2. Il Ciclo di Vita dell'Intelligenza (Le 4 Fasi)
+
+Il sistema non è statico, ma impara ed evolve attraverso un ciclo continuo diviso in 4 fasi logiche:
+
+#### **Fase 1: Inferenza in Tempo Reale (Online)**
+È il momento della verità, quando l'utente chiede una previsione. Tutto avviene in millisecondi sul Backend Node.js.
+*   **Input (La materia prima):** Il sistema prende i dati meteo grezzi dalle API (OpenMeteo). Non vede "sole" o "pioggia", ma numeri: `Vento: 15.2`, `Pressione: 1012`.
+*   **Il Cervello (ONNX):** Il server interroga il file `pesca_model.onnx`. Non usa semplici regole "SE... ALLORA", ma applica una matrice matematica complessa frutto dell'apprendimento passato.
+*   **Output (Lo Score):** Sputa fuori un numero secco (es. **7.8**). Questo numero viene inviato all'utente e al **SUPER AGENT** per guidare la strategia.
+
+#### **Fase 2: Raccolta Dati e Feedback (Memoria Episodica)**
+Qui il sistema accumula esperienza reale, salvando tutto nel database locale (SQLite).
+*   **Salvataggio Episodio:** La previsione fatta (es. "7.5") e il meteo di quel momento vengono archiviati subito nella tabella `fishing_episodes`.
+*   **Ground Truth (La Realtà):** L'utente va a pesca e torna. Tramite l'app inserisce un **Feedback** (es. *"Ho preso poco, voto 4"*).
+*   **Chiusura del Cerchio:** Questo voto reale viene aggiornato accanto alla previsione originale. Ora il sistema sa che, in quelle condizioni, **aveva previsto 7.5 ma la realtà era 4**. Questo "errore" è la lezione da imparare.
+
+#### **Fase 3: Addestramento Offline (GitHub Actions)**
+Questa fase è pesante computazionalmente, quindi viene delegata esternamente per mantenere i costi a zero e non rallentare l'app.
+*   **Trigger:** Periodicamente (es. mensilmente), **GitHub Actions** scarica tutto lo storico (Meteo + Feedback Reali) dal database SQLite.
+*   **Gradient Boosting (Il Maestro):** Sulle macchine di GitHub, l'algoritmo *Gradient Boosting* macina questi dati. Analizza migliaia di episodi per capire le relazioni matematiche nascoste e correggere gli errori della Fase 2.
+*   **Generazione ONNX:** Una volta imparata la lezione, il risultato viene compresso in un **nuovo file `pesca_model.onnx`** ottimizzato.
+
+#### **Fase 4: Deployment e Aggiornamento**
+Il sistema diventa più intelligente senza intervento umano.
+*   **Rilascio:** GitHub pubblica il nuovo modello aggiornato.
+*   **Download:** Il tuo Backend scarica automaticamente il nuovo file e sostituisce il vecchio "cervello".
+*   **Risultato:** Alla prossima richiesta (Fase 1), le previsioni saranno più precise perché basate sull'esperienza accumulata e non più sulla teoria.
+
+### 3. Il problema del "Cold Start" (Partenza a Freddo)
+Un dettaglio onesto e cruciale: oggi, poiché l'app è nuova, il modello (Seed Model) è stato "istruito" simulando regole di esperti umani (euristiche). È come un neolaureato: sa la teoria alla perfezione, ma non ha esperienza pratica.
+Tra 6 mesi, grazie al ciclo sopra descritto, il modello non seguirà più le regole teoriche ma la **realtà locale**. Se a Posillipo col vento da Sud non si pesca (anche se i manuali dicono di sì), il modello imparerà a dare un voto basso.
+
+### 4. Il Vincolo (La "Barriera di Sicurezza")
+Questo è il concetto chiave dell'architettura **P.H.A.N.T.O.M.**: l'AI generativa (Gemini) è brava a scrivere, ma a volte "allucina" per compiacere l'utente.
+Il **Vincolo** impedisce questo errore:
+1.  Il Modello Matematico (Fase 1) calcola **3.2** (Pessimo).
+2.  Questo numero viene passato all'Agente AI con un ordine tassativo: *"Analizza basandoti su score 3.2"*.
+3.  L'Agente è costretto a dire: *"Condizioni difficili, meglio restare a casa"*.
+**Non può mentire** perché la matematica ha già deciso la verità.
+
+
+
+########################### 2. 🧠 Il Cervello Centrale (Super Agent Orchestrator) ###########################
+
+### 1. Il Ruolo: Management, non Esecuzione
+Il Super Agent (scritto in Node.js) non fa il lavoro sporco. Non scarica il meteo, non cerca nel database. Il suo unico compito è **capire il problema e assegnare i compiti** alle persone (o meglio, ai bot) giuste.
+Non è un'intelligenza artificiale generativa che "chiacchiera", ma un pezzo di codice logico che prende decisioni strutturali.
+
+### 2. Routing Intelligente (Capire la Domanda)
+Quando arriva una richiesta ("Che pesce pesco domani a Posillipo?"), il Super Agent la smonta:
+*   **Target:** "Pesce" -> Serve lo specialista biologo (`SpeciesAdvisor`).
+*   **Tempo:** "Domani" -> Serve lo specialista meteo (`MeteoAnalyst`) per vedere l'evoluzione.
+*   **Luogo:** "Posillipo" -> Serve lo specialista del mare (`MarineSpecialist`) e la memoria storica di quella zona (`MemoryRetriever`).
+
+Se la domanda fosse stata solo "A che ora sorge il sole?", il Super Agent avrebbe attivato *solo* il MeteoAnalyst, risparmiando risorse. Questa è l'intelligenza del routing.
+
+### 3. Reclutamento e il "Briefing" (Il PescaScore come Guida)
+Questo è un dettaglio fine ma cruciale. Quando il Super Agent chiama i suoi specialisti, non dice solo "cercate dati". Dice:
+*"Ragazzi, il modello matematico ha dato un voto di **7.8 (Ottimo)**. Cercate dati che confermino o spieghino questo successo."*
+
+*   Passa il "PescaScore" come **parametro di contesto**.
+*   In questo modo, lo `SpeciesAdvisor` non cercherà pesci che si prendono con il maltempo, ma predatori attivi con condizioni ottimali. Tutti i worker lavorano allineati sulla stessa "verità matematica".
+
+### 4. Chi sono gli "Operai" (Workers)?
+Il sistema divide i compiti in due categorie:
+
+*   **I Reporter del "Tempo Reale" (Live Data):**
+    *   **`MeteoAnalyst` & `MarineSpecialist`:** Loro guardano *fuori dalla finestra* adesso (usando le API esterne OpenMeteo/Marine). Dicono: "La pressione sta scendendo" o "La corrente è forte".
+*   **I Bibliotecari del "Sapere" (Static/Historical Data):**
+    *   **`SpeciesAdvisor`:** Guarda nei *libri* (Knowledge Base/ChromaDB). Dice: "Con la corrente forte, la Spigola caccia".
+    *   **`MemoryRetriever`:** Guarda nel *diario dei ricordi* (SQLite/ChromaDB). Dice: "L'anno scorso, con queste onde, Marco ha preso due saraghi".
+
+### 5. Parallelismo (Il Segreto della Velocità)
+In un sistema vecchio stampo (sequenziale), accadrebbe questo:
+1. Chiamo il meteo... (aspetto 2s)
+2. Chiamo il mare... (aspetto 2s)
+3. Cerco nel DB... (aspetto 2s)
+4. Totale attesa: **6 secondi**.
+
+Il Super Agent usa il **Parallelismo (Promise.all in Node.js)**:
+1. Chiama Meteo + Mare + DB + Manuali **tutti insieme**.
+2. Il processo più lento ci mette 2s?
+3. Totale attesa: **2 secondi**.
+
+### In sintesi
+Il **Super Agent** è il componente che trasforma una richiesta vaga dell'utente in un piano d'attacco preciso, sguinzaglia una squadra di specialisti contemporaneamente e si assicura che tutti lavorino coerentemente con il voto oggettivo calcolato dal ML.
+
+
+
+				• AGENTE SI / AGENTE NO?
+				Ecco la differenza fondamentale in breve:
+
+				**Senza Agente (Soluzione Canonica/Procedurale):**
+				Il sistema segue un **copione rigido**.
+				*   *Esempio:* "Scarica meteo -> Cerca nel DB -> Se vento > 20km/h scrivi 'Vento forte' -> Mostra risultato".
+				*   **Limite:** Se la situazione è ambigua o complessa (es. vento forte ma acqua calda e marea favorevole), il codice non sa come adattarsi o collegare i puntini in modo creativo. Esegue solo quello per cui è stato programmato riga per riga.
+
+				**Con Agente (Soluzione AI/Autonoma):**
+				Il sistema ha capacità di **ragionamento e decisione**.
+				*   *Esempio:* L'Agente vede i dati e "pensa": "C'è vento forte, *ma* l'acqua è calda. Questo schema mi ricorda una pescata dell'anno scorso. Decido di cercare nella memoria storica invece di applicare la regola standard del vento".
+				*   **Il "Di più":** L'Agente può **cambiare strada** in corsa, scegliere quali strumenti usare e **sintetizzare una risposta unica** collegando fatti diversi (Meteo + Ricordi + Biologia) come farebbe un esperto umano, invece di incollare pezzi di testo predefiniti.
+
+
+				• IN CHE MODO L'AGENTE CAMBIA STRADA?
+
+				È una domanda ottima, perché qui sta la "magia" (che in realtà è solo ingegneria) degli Agenti AI.
+
+				L'Agente non ha "libero arbitrio" come noi, ma **simula una decisione** attraverso un processo chiamato **Reasoning Loop** (Ciclo di Ragionamento), spesso basato su un pattern chiamato **ReACT** (Reasoning + Acting).
+
+				Ecco come decide di "cambiare strada" in 3 passi concreti:
+
+				### 1. L'Analisi (Il "Pensiero Interiore")
+				Invece di eseguire subito un comando, l'Agente prima parla con se stesso (nel backend questo è un prompt nascosto inviato all'LLM).
+
+				*   **Scenario:** C'è vento forte (30km/h) ma l'acqua è caldissima (24°C).
+				*   **Codice Canonico:** Esegue `IF vento > 20 THEN print("Non si pesca")`. Fine.
+				*   **Agente:** Riceve i dati e il sistema gli chiede: *"Analizza la situazione. Cosa noti di strano?"*
+				*   **Risposta dell'Agente (Reasoning):** *"Noto un conflitto. Il vento è proibitivo, ma la temperatura dell'acqua è eccezionalmente alta. Questo potrebbe attivare i predatori. Non posso usare la risposta standard."*
+
+				### 2. La Scelta dello Strumento (Tool Selection)
+				Una volta capito che la regola standard non basta, l'Agente consulta la sua "cassetta degli attrezzi" (i Tools che gli abbiamo programmato).
+
+				*   **Agente:** *"Ho bisogno di capire se questa combinazione strana (Vento Alto + Acqua Calda) ha mai funzionato prima. Non userò il tool 'Regole Meteo' (che direbbe di no), ma decido di usare il tool 'Memoria Episodica' per cercare precedenti."*
+				*   **Azione:** Il codice esegue `MemoryRetriever.search({ conditions: "windy & hot_water" })`.
+
+				### 3. L'Adattamento (Il Cambio di Strada)
+				Se la ricerca nella memoria dà risultati positivi, l'Agente cambia la conclusione finale.
+
+				*   **Risultato Memoria:** Trova 3 episodi del 2024 dove con quelle condizioni si sono prese spigole.
+				*   **Decisione Finale:** *"Ignoro l'allarme vento standard. Costruisco una risposta che dice: 'Attenzione al vento, MA statisticamente con quest'acqua calda qui si pesca bene'."*
+
+				### In sintesi, come fa a decidere?
+				Decide perché **l'LLM (il cervello)** valuta l'input (i dati) rispetto all'obiettivo (dare un buon consiglio) e, se vede un'incongruenza o un'opportunità, **sceglie quale funzione del codice eseguire** tra quelle disponibili.
+
+				Non segue un binario dritto (A -> B -> C), ma ha degli scambi (nodi decisionali) dove l'AI sceglie se andare a destra o a sinistra in base a quello che ha appena letto.
+
+
+
+
+########################### 3. 📚 La Biblioteca e la Memoria (Workers in Azione) ###########################
+
+Questa sezione è fondamentale perché spiega **come il sistema evita di "inventare"** (le cosiddette allucinazioni dell'AI).
+
+Immagina l'Agente non come un genio che sa tutto a memoria, ma come un **ricercatore diligente** che ha accesso a due archivi molto diversi prima di rispondere.
+
+Ecco la differenza sostanziale tra le due "stanze" in cui i Workers entrano a cercare informazioni:
+
+Ecco la versione definitiva. Ho mantenuto intatta la tua descrizione del Reranking/RAG++ e ho espanso specificamente il punto su "Come si riempie e si aggiorna" introducendo il ruolo di GitHub Actions e del file sources.json, come richiesto dall'architettura.
+
+code
+Markdown
+download
+content_copy
+expand_less
+### 1. La Biblioteca Tecnica (RAG++ & Hybrid Reranking)
+*   **Cos'è:** È un archivio di **conoscenza "fredda" e generale**. Contiene manuali di pesca, articoli scientifici, enciclopedie sui pesci e regole tecniche. Non è semplice "ricerca", è un motore di precisione.
+*   **Chi la usa:** Lo `SpeciesAdvisor` (il biologo) e l'Agente Principale quando devono trovare una tecnica specifica.
+*   **La Tecnologia (RAG++):** Non usiamo un RAG standard, ma un sistema a **due stadi** per eliminare il "rumore":
+    1.  **Retrieval (La rete a strascico):** **ChromaDB** trova velocemente i 20 documenti più simili alla tua domanda usando la matematica vettoriale (Embedding).
+    2.  **Hybrid Reranking (Il setaccio di precisione):** Qui avviene la magia. I risultati vengono riletti e riordinati da un modello AI specializzato (**Cohere** come primario, **HuggingFace** come fallback) che capisce le sfumature linguistiche profonde.
+*   **Perché il Reranking?** I database vettoriali a volte sbagliano contesto (es. confondono "pesca *alla* spigola" con "pesca *della* spigola"). Il Reranker corregge l'ordine portando in cima solo l'informazione *veramente* pertinente, scartando i falsi positivi.
+*   **Alimentazione e Aggiornamento (Automazione CI/CD):**
+    *   **Il "Telecomando" (`sources.json`):** Tu non tocchi mai il database. Ti limiti ad aggiungere link o riferimenti in questo file di configurazione su GitHub.
+    *   **L'Operaio (GitHub Actions):** Una pipeline automatica legge `sources.json`, scarica i nuovi contenuti, li processa e aggiorna la Knowledge Base senza intervento umano.
+    *   **Feedback Loop:** Inoltre, se il sistema rileva pattern ricorrenti nei feedback utente (es. "Le orate mangiano solo col granchio qui"), può promuovere automaticamente questa "perla di saggezza" a regola generale.
+*   **L'Esempio Pratico:** Se chiedi "Esche per spigola con acqua torbida", ChromaDB potrebbe trovare genericamente "esche per spigola". Il **Reranker** invece spinge in prima posizione proprio il paragrafo che dice: *"In condizioni di scarsa visibilità, usare artificiali rumorosi o bianchi"*.
+
+### 2. Il Diario dei Ricordi (Memoria Episodica - `MemoryRetriever`)
+*   **Cos'è:** È un archivio di **esperienza "calda" e specifica**. Contiene la storia di *cosa è successo davvero* agli utenti dell'app in passato. Non contiene teoria, ma fatti.
+*   **Chi la usa:** Il `MemoryRetriever` (lo storico).
+*   **La Tecnologia:** Usa principalmente **SQLite** (database classico veloce per i numeri) supportato da ChromaDB per cercare contesti simili.
+*   **Come si riempie:** Esclusivamente tramite i **Feedback degli utenti**. Ogni volta che qualcuno chiude una battuta di pesca e mette un voto (1-5), si crea una nuova pagina in questo diario.
+*   **L'Esempio Pratico:** L'agente guarda fuori e vede "Vento Nord, 15°C". Va nel diario e cerca: "Mostrami tutte le pagine del passato con Vento Nord e 15°C". Trova che il 15 Gennaio 2025 Mario ha preso zero pesci.
+    *   *Risultato:* L'agente ti dirà: "Attenzione, statisticamente con questo vento qui non si prende nulla", basandosi su prove reali, non su manuali teorici.
+
+### In sintesi: Teoria vs Pratica
+*   La **Biblioteca (RAG)** dice all'Agente cosa *dovrebbe* succedere secondo la scienza (Teoria).
+*   La **Memoria Episodica** dice all'Agente cosa *è successo* davvero in passato (Pratica).
+
+Il **Super Agent** (il cervello centrale visto prima) ascolta entrambi: se il Manuale dice "Si pesca" ma la Memoria dice "Tutti hanno fatto cappotto", l'Agente intelligente ti avviserà della discrepanza, offrendoti un consiglio molto più profondo e sicuro.
+
+
+NOTA Chroma DB:
+- Viene gestito come microservizio Python locale (porta 8001) interrogato da Node.js su due collection (knowledge e episodes).
+- Si aggiorna via pipeline CI/CD (GitHub Actions) per la Knowledge Base tecnica e live salvando i feedback descrittivi degli utenti
+- un Cron Job mensile esegue la cleanup (cancellazione episodi vecchi, oltre i 90 giorni, mantenendo però le statistiche riassuntive) per i limiti del Free Tier e la CI/CD aggiorna le fonti (in particolare in seguito ad una modifica al file sources.json (es. un nuovo link a un manuale di pesca), GitHub avvia una procedura che legge quel contenuto, lo trasforma in dati comprensibili all'AI e aggiorna automaticamente la Knowledge Base che è fonte primaria per popolare o ripristinare automaticamente ChromaDB)
+
+
+###########################  4. 🗣️ La Sintesi (Il Ruolo di Gemini/Cloud AI) ###########################
+
+Questa è la fase conclusiva, il momento in cui tutti i pezzi del puzzle (raccolti dai Workers) vengono assemblati in un discorso comprensibile per l'essere umano.
+
+Ecco cosa succede esattamente tra il server (Node.js) e l'AI (Gemini):
+
+### 1. Il Corpo (La raccolta dei "pezzi")
+Immagina che i vari Workers (`Meteo`, `Marine`, `Memory`, `Species`) siano tornati dalla loro ricerca. Ognuno ha prodotto un **micro-report** tecnico e grezzo.
+Il `Response Aggregator` (un modulo Node.js) non ragiona, fa solo da "collante". Prende questi pezzi:
+
+*   *Meteo:* "Pressione 1018 in calo, Vento Sud 15km/h."
+*   *Marine:* "Onde 1.2m, Corrente media."
+*   *Memory:* "Trovati 2 episodi simili con catture positive."
+*   *Score:* "7.8/10."
+
+Li impacchetta tutti insieme in un unico blocco di testo strutturato (un JSON o una stringa formattata).
+
+### 2. La Mente (Il Prompt di Ingegneria)
+A questo punto, questo pacchetto viene inviato a **Google Gemini** (l'LLM nel cloud). Ma non viene inviato da solo. Viene avvolto in un **System Prompt** (un'istruzione segreta) molto preciso che dice sostanzialmente:
+
+> *"Tu sei un esperto di pesca (Fishing Agent). Ti fornirò dei DATI REALI raccolti dai miei strumenti. Il tuo compito NON è inventare, ma **narrare** questi dati.
+> - Usa lo Score (7.8) come tono della voce (entusiasta).
+> - Collega il fatto che il mare è mosso (dato Marine) con la presenza della Spigola (dato Knowledge Base).
+> - Cita i successi passati (dato Memory) per dare fiducia.
+> - Rispondi in modo fluido, come un amico esperto."*
+
+### 3. L'Output (La Magia della Narrazione)
+Gemini riceve i dati grezzi e le istruzioni, ed esegue la **Sintesi**.
+Invece di stampare una tabella fredda, scrive una frase articolata:
+
+> *"Domani a Posillipo le condizioni sono ottime!"* (Ha tradotto lo Score 7.8 in parole)
+> *"Il mare mosso, con onde di 1.2 metri..."* (Ha letto il dato Marine)
+> *"...crea la schiuma perfetta per i predatori. Infatti, i manuali indicano che questo è il momento ideale per la Spigola..."* (Ha collegato Marine + KB)
+> *"...proprio come successo in passato con condizioni simili."* (Ha integrato la Memory).
+
+### In sintesi
+Questa fase trasforma una lista di **ingredienti crudi** (dati tecnici e numeri) in un **piatto cucinato** (un consiglio discorsivo e logico).
+Senza questa fase, l'utente vedrebbe solo numeri. Grazie a Gemini, vede un ragionamento. L'AI qui non lavora come "motore di ricerca" (quello l'hanno fatto i Workers), ma come **copywriter e analista**.

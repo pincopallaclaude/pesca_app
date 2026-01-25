@@ -23,19 +23,10 @@ class AnalystCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Il contenitore che fornisce il ViewModel alla View
     return ChangeNotifierProvider(
-      create: (_) {
-        // 1. Crea l'istanza del ViewModel
-        final viewModel = AnalysisViewModel(lat, lon);
-        // 2. Chiama il nuovo metodo per avviare il caricamento con ritardo
-        viewModel.fetchAnalysisWithDelay();
-        // 3. Restituisci il ViewModel
-        return viewModel;
-      },
-      child: GlassmorphismCard(
-        child: AnalysisView(onClose: onClose),
-      ),
+      create: (_) => AnalysisViewModel(lat, lon)..fetchAnalysisWithDelay(),
+      child: AnalysisView(
+          onClose: onClose), // AnalysisView gestisce già lo stile Blue Glass
     );
   }
 }

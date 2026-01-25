@@ -27,12 +27,10 @@ class GlassmorphismCard extends StatelessWidget {
     super.key,
   });
 
-// --- NUOVO CODICE DA SOSTITUIRE (SOLO IL METODO build) ---
   @override
   Widget build(BuildContext context) {
     Widget? headerWidget;
     if (title != null) {
-// --- NUOVO CODICE DA SOSTITUIRE (PARTE CENTRALE DEL METODO build) ---
       headerWidget = Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -97,7 +95,5 @@ class GlassmorphismCard extends StatelessWidget {
         ),
       ),
     );
-// --- FINE NUOVO CODICE ---
-// --- RIGA DI CODICE SUCCESSIVA (INVARIATA, COME CONTESTO) ---
   }
 }
