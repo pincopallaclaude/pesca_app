@@ -26,10 +26,10 @@ class ApiException implements Exception {
 class ApiService {
   // L'URL base del backend
   // --- USA L'URL DI RENDER ---
-  //final String _baseUrl = 'https://pesca-api.onrender.com/api';
+  final String _baseUrl = 'https://pesca-api.onrender.com/api';
 
   // --- NUOVA LOGICA: CLIENT HTTP PERSONALIZZATO ---
-  final String _baseUrl = 'http://192.168.1.7:10000/api'; // home
+  //final String _baseUrl = 'http://192.168.1.7:10000/api'; // home
   //final String _baseUrl = 'http://192.168.1.8:10000/api'; // home
   //final String _baseUrl = 'http://192.168.11.70:10000/api'; // office
 
